@@ -1,0 +1,8 @@
+{
+    "SERVER_IP": "127.0.0.1",
+    "SERVER_PORT": 5000,
+    "CLIENT_NAME": "client1",
+    "CLIENT_IP": "127.0.0.1",
+    "CLIENT_UDP_PORT": 6000,
+    "CLIENT_TCP_PORT": 7000
+}
