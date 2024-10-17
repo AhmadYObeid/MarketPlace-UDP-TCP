@@ -29,6 +29,7 @@ print ("Socket was successfuly bound!\n")
 #Used to allow KeyboardInterrupt to trigger
 s.settimeout(5)
 
+#Implements a switch statement to handle the different requests coming from the client
 def handle_request(user_request, data):
   match user_request:
     case "REGISTER":
@@ -49,7 +50,7 @@ except FileNotFoundError:
 
 #Handles the register request
 def handle_registration(data):
-  request_type, name, ip, udp, tcp = data.split(", ") #splitting the data into the different fields provided
+  request_type, request_number, name, ip, udp, tcp = data.split(", ") #splitting the data into the different fields provided
   msg = None #msg variable to store the reply message sent by the server to the client after handling the request
   #TODO: Add the condition where the server cannot add any more clients
   if name not in users:
@@ -63,9 +64,9 @@ def handle_registration(data):
     with open('users.json', 'w') as json_file:
       json.dump(users, json_file, indent=4)
 
-    msg = request_type
+    msg = f"REGISTERED, {request_number}"
   else:
-    msg = "REGISTER-DENIED, The user already exists in the system!"
+    msg = f"REGISTER-DENIED, {request_number}, The user already exists in the system!"
 
   return msg
 
