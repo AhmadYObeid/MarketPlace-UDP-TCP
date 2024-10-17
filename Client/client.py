@@ -11,7 +11,7 @@ def load_request_number():
   try:
     with open('client_config.json', 'r') as json_file:
       data = json.load(json_file)
-      return data.get('request_number', 1)
+      return data
   except FileNotFoundError:
     return 1 #returns 1 if file is not exisiting yet, meaning we are starting fresh
   except json.JSONDecodeError:
