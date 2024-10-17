@@ -20,7 +20,6 @@ def load_request_number():
 #Updates the request_number in the client_config.json file
 #Called everytime a request is sent to the server
 def update_request_number(request_number):
-  data = {'request_number': request_number}
   with open("client_config.json", "w") as json_file:
     json.dump(request_number, json_file, indent=4)
 
