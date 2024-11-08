@@ -1,10 +1,14 @@
 import socket 
 import sys
 import json
+import time #library used to simulate simutanous client reqeuest sent to the server for multi-threading test purposes
 
 #defining the socket parameters (IP + PORT)
 client_host = "0.0.0.0" #listening on all available netwrok interfaces
 client_port = 2000 #arbitrary port number for the client socket
+
+#defining the TCP port number for testing purposes
+client_TCP_port = 2100 #arbitrary number for now
 
 #Loads the current value of the request_number from the client_config.json file
 def load_request_number():
@@ -54,9 +58,9 @@ def user_request(user_input):
 def user_registration(request_number):
   print(f"Enter the following information to register yourself within the shopping system:\n")
   name = input(f"Name: ")
-  ip = input(f"IP Address: ")
-  udp = input(f"UDP socket#: ")
-  tcp = input(f"TCP socket#: ")
+  ip = socket.gethostbyname(socket.gethostname())
+  udp = client_port
+  tcp = client_TCP_port
   msg = f"REGISTER, {str(request_number)}, {name}, {ip}, {udp}, {tcp}"
   return msg
 
@@ -68,30 +72,44 @@ def user_deregistration(request_number):
 
 print(f"Welcome to the Peer-to-Peer Shopping System!\n")
 
+# #just a method to test multi request transmission (uncomment to use)
+# def test_multiThreading():
+#   name = 'Larry'
+#   ip = socket.gethostbyname(socket.gethostname())
+#   udp = client_port
+#   tcp = client_TCP_port
+#   msg = f"REGISTER, {str(request_number)}, {name}, {ip}, {udp}, {tcp}"
+#   return msg
+
 #Sending a message to the server
 while True:
-  #Prompting the user to choose a feature offered by the shopping system
+#   #Prompting the user to choose a feature offered by the shopping system
   user_input = int(input(f"""Please choose one of the options below:\n
   [1] - Register
   [2] - De-Register
                 
 ->"""))
   
-  #Processing the user's input and saving it 
+#   #Processing the user's input and saving it 
   request_msg = user_request(user_input)
+  
+  # num_requests = 2 #Arbitrary number of requests to send multiple requests at once
 
   try:
-    s.sendto(request_msg.encode('utf-8'), (server_host,server_port)) #the string message is encoded into bytes before being sent to the server using the utf-8 encoding standard
-    request_number += 1 #incrementing the request number for the next requests to be sent
-    update_request_number(request_number) #updating the client_config.json file with the newest request number
+      s.sendto(request_msg.encode('utf-8'), (server_host,server_port)) #the string message is encoded into bytes before being sent to the server using the utf-8 encoding standard
+      request_number += 1 #incrementing the request number for the next requests to be sent
+      update_request_number(request_number) #updating the client_config.json file with the newest request number
 
-    #storing the reply message of the server upon receiving the client request
-    d = s.recvfrom(1024)
-    reply = d[0].decode('utf-8') #Decode the message provided by the server into a string using the utf-8 decoding standard
-    addr = d[1]
-    
-    #displaying the server's reply message
-    print(f"\nServer reply: {reply}\n")
+      #storing the reply message of the server upon receiving the client request
+      d = s.recvfrom(1024)
+      reply = d[0].decode('utf-8') #Decode the message provided by the server into a string using the utf-8 decoding standard
+      addr = d[1]
+      
+      #displaying the server's reply message
+      print(f"\nServer reply [{addr[0]}, {addr[1]}]: {reply}\n")
+
+      #small delay between requests to simulate a new client request
+      #time.sleep(0.1)
     
   except socket.error as msg:
     print("Error Occured!")
