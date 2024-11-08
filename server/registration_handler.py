@@ -1,7 +1,9 @@
 import json
+import threading
+
+lock = threading.Lock()
 
 def load_users(file_path):
-    """Load users from a JSON file."""
     try:
         with open(file_path, 'r') as file:
             return json.load(file)
@@ -9,7 +11,6 @@ def load_users(file_path):
         return {}
 
 def save_users(users, file_path):
-    """Save users to a JSON file."""
     with open(file_path, 'w') as file:
         json.dump(users, file)
 
@@ -19,39 +20,39 @@ def handle_registration(message, users, max_clients):
         return "ERROR: Invalid registration format."
 
     command = parts[0]
-    rq_number = parts[1]
+    rq_number = parts[1]  # Extract RQ number for response tracking
 
     if command == "REGISTER":
         name, client_ip, udp_port, tcp_port = parts[2], parts[3], int(parts[4]), int(parts[5])
 
-        # Check if the name is already registered
-        if name in users:
-            return f"ERROR: User '{name}' is already registered."
+        with lock:
+            if name in users:
+                return f"ERROR: User '{name}' is already registered. (RQ#: {rq_number})"
 
-        # Check if the server can handle more clients
-        if len(users) >= max_clients:
-            return "ERROR: Server cannot handle more clients."
+            if len(users) >= max_clients:
+                return f"ERROR: Server cannot handle more clients. (RQ#: {rq_number})"
 
-        # Assign a new unique RQ#
-        new_rq_number = len(users) + 1
-
-        # Register the user
-        users[name] = {
-            "RQ#": new_rq_number,
-            "IP": client_ip,
-            "UDP_Port": udp_port,
-            "TCP_Port": tcp_port
-        }
-        return f"SUCCESS: User '{name}' registered with RQ#: {new_rq_number}."
+            # Register the user
+            users[name] = {
+                "RQ#": rq_number,
+                "IP": client_ip,
+                "UDP_Port": udp_port,
+                "TCP_Port": tcp_port
+            }
+            save_users(users, 'data/server_data.json')
+        
+        return f"SUCCESS: User '{name}' registered. (RQ#: {rq_number})"
 
     elif command == "DE-REGISTER":
         name = parts[2]
 
-        if name not in users:
-            return f"ERROR: User '{name}' not found."
-
-        del users[name]
-        return f"SUCCESS: User '{name}' has been deregistered."
+        with lock:
+            if name not in users:
+                return f"ERROR: User '{name}' not found. (RQ#: {rq_number})"
+            del users[name]
+            save_users(users, 'data/server_data.json')
+        
+        return f"SUCCESS: User '{name}' has been deregistered. (RQ#: {rq_number})"
 
     else:
-        return "ERROR: Unsupported command."
+        return f"ERROR: Unsupported command. (RQ#: {rq_number})"
