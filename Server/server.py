@@ -37,6 +37,8 @@ def handle_request(user_request, data, addr):
       return handle_registration(data, addr)
     case "DE-REGISTER":
       return handle_deregistration(data, addr)
+    case "LOOKING_FOR":
+      return handle_looking_for(data, addr)
     case _:
       print("Invalid Request!")
 
@@ -54,7 +56,6 @@ lock = threading.Lock()
 #Handles the register request
 def handle_registration(data, addr):
   request_type, request_number, name, ip, udp, tcp = data.split(", ") #splitting the data into the different fields provided
-  msg = None #msg variable to store the reply message sent by the server to the client after handling the request
   #TODO: Add the condition where the server cannot add any more clients
   #Acquiring the lock before modifying the 'users' dictionary
   lock.acquire()
@@ -84,7 +85,6 @@ def handle_registration(data, addr):
 #Handles the de-registration request 
 def handle_deregistration(data, addr):
   request_type, name = data.split(", ") 
-  msg = None
 
   #Acquiring the lock before modifying the 'users' dictionary
   lock.acquire()
@@ -104,6 +104,30 @@ def handle_deregistration(data, addr):
   #Sending the handled request message back to the client
   s.sendto(reply_msg.encode('utf-8'), addr)
   print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
+
+#Handles the looking_for request
+def handle_looking_for(data, addr):
+  request_type, reqeuest_number, name, item_name, item_description, max_price = data.split(", ")
+  #Preparing the reply message to be sent to all client of the system
+  search_msg = f"SEARCH, RQ#, {item_name}, {item_description}"
+
+  print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
+
+  #Acquiring the lock before reading from the users dictionary
+  lock.acquire()
+
+  try:
+    for user in users:
+      if user != name:
+        #Sending the search message to all clients except the buyer
+        s.sendto(search_msg.encode('utf-8'), (users[user]["ip"], int(users[user]["udp"])))
+      else:
+        pass
+  finally:
+    lock.release()
+
+  #TODO: add the reply_msg to the client here.
+       
 
 #Listening for client requests indefinitely
 while True:
