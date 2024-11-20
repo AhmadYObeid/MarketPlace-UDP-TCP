@@ -3,7 +3,6 @@ import sys
 import json
 import threading
 import random
-import time
 
 # Socket parameters
 client_host = "0.0.0.0"
@@ -35,8 +34,9 @@ except socket.error:
     sys.exit()
 
 s.bind((client_host, client_port))
+is_registered = False  # To track registration status
 
-# Define user actions
+# User actions
 def user_request(user_input):
     match user_input:
         case 1:
@@ -48,26 +48,33 @@ def user_request(user_input):
         case _:
             print("Invalid option! Please try again.")
 
-# Registration request
+# Registration
 def user_registration(request_number):
+    global is_registered
     print("Enter registration details:")
     name = input("Name: ")
     ip = socket.gethostbyname(socket.gethostname())
     udp = client_port
     tcp = client_TCP_port
     msg = f"REGISTER, {str(request_number)}, {name}, {ip}, {udp}, {tcp}"
+    is_registered = True
     return msg
 
-# De-registration request
+# De-registration
 def user_deregistration(request_number):
+    global is_registered
     name = input("Enter the name of the user to de-register: ")
     ip = socket.gethostbyname(socket.gethostname())
     udp = client_port
     msg = f"DE-REGISTER, {name}, {ip}, {udp}"
+    is_registered = False
     return msg
 
-# Item search request
+# Search for items
 def item_search(request_number):
+    if not is_registered:
+        print("You must register before searching for items!")
+        return None
     print("Enter details for item search:")
     name = input("Your Name: ")
     item_name = input("Item Name: ")
@@ -78,7 +85,7 @@ def item_search(request_number):
 
 print("Welcome to the Peer-to-Peer Shopping System!")
 
-# Main loop for client requests
+# Main loop
 while True:
     user_input = int(input("""Choose an option:
   [1] - Register
@@ -87,17 +94,18 @@ while True:
 -> """))
 
     request_msg = user_request(user_input)
+    if request_msg is None:
+        continue
 
     try:
         s.sendto(request_msg.encode('utf-8'), (server_host, server_port))
         request_number += 1
         update_request_number(request_number)
 
+        # Receive server reply
         d = s.recvfrom(1024)
         reply = d[0].decode('utf-8')
         addr = d[1]
-
         print(f"\nServer reply [{addr[0]}, {addr[1]}]: {reply}\n")
-    
-    except socket.error as msg:
+    except socket.error:
         print("Error occurred!")

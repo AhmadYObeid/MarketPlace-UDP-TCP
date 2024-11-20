@@ -3,7 +3,6 @@ import threading
 import sys
 import json
 import random
-import time
 
 # Server parameters
 HOST = '0.0.0.0'
@@ -27,22 +26,17 @@ print("Socket successfully bound!\n")
 
 s.settimeout(5)
 
-# Load existing users and items
+# Users and items
 try:
     with open('users.json', 'r') as json_file:
         users = json.load(json_file)
 except FileNotFoundError:
     users = {}
 
-items = {}  # This will hold items each user has
-
+items = {}  # Items available from users
 lock = threading.Lock()
 
-# Method to simulate item ownership
-def has_item():
-    return random.choice([True, False])
-
-# Handle different request types
+# Request handler
 def handle_request(request_type, data, addr):
     match request_type:
         case "REGISTER":
@@ -58,7 +52,7 @@ def handle_request(request_type, data, addr):
 
 # Registration handler
 def handle_registration(data, addr):
-    request_type, request_number, name, ip, udp, tcp = data.split(", ")
+    _, request_number, name, ip, udp, tcp = data.split(", ")
     lock.acquire()
     try:
         if name not in users:
@@ -72,65 +66,45 @@ def handle_registration(data, addr):
         lock.release()
 
     s.sendto(reply_msg.encode('utf-8'), addr)
-    print(f"Message from [{addr[0]}, {addr[1]}]: {data}")
 
 # De-registration handler
 def handle_deregistration(data, addr):
-    request_type, name, client_ip, client_udp = data.split(", ")
+    _, name, client_ip, client_udp = data.split(", ")
     lock.acquire()
     try:
-        if name in users:
-            user_info = users[name]
-            if user_info['ip'] == client_ip and user_info['udp'] == client_udp:
-                del users[name]
-                with open('users.json', 'w') as json_file:
-                    json.dump(users, json_file, indent=4)
-                reply_msg = f"User [{name}] removed!"
-            else:
-                reply_msg = f"De-registration failed: IP/UDP mismatch."
+        if name in users and users[name]["ip"] == client_ip and users[name]["udp"] == client_udp:
+            del users[name]
+            with open('users.json', 'w') as json_file:
+                json.dump(users, json_file, indent=4)
+            reply_msg = f"User [{name}] removed!"
         else:
-            reply_msg = f"User [{name}] does not exist!"
+            reply_msg = f"De-registration failed!"
     finally:
         lock.release()
 
     s.sendto(reply_msg.encode('utf-8'), addr)
-    print(f"Message from [{addr[0]}, {addr[1]}]: {data}")
 
 # Search handler
 def handle_search_request(data, addr):
     _, request_number, buyer_name, item_name, item_description, max_price = data.split(", ")
     search_msg = f"SEARCH, {request_number}, {item_name}, {item_description}"
-    
     for user, details in users.items():
         if user != buyer_name:
-            has_item_response = has_item()
-            if has_item_response:
-                offer_msg = f"OFFER, {request_number}, {user}, {item_name}, {random.randint(int(max_price), int(max_price) + 20)}"
-                s.sendto(offer_msg.encode('utf-8'), (details['ip'], int(details['udp'])))
-                print(f"Sent offer from {user} for '{item_name}'")
+            s.sendto(search_msg.encode('utf-8'), (details["ip"], int(details["udp"])))
 
-    print(f"Sent search request for '{item_name}' to all users except {buyer_name}")
-
-# Offer handler (received from clients)
+# Offer handler
 def handle_offer(data, addr):
     _, request_number, name, item_name, price = data.split(", ")
-    print(f"Offer received from {name}: Item '{item_name}' at price {price}")
+    print(f"Offer received: {name} offers {item_name} for {price}")
 
-# Main loop to listen for requests
+# Main loop
 while True:
     try:
         d = s.recvfrom(1024)
         data = d[0].decode('utf-8')
         addr = d[1]
-
-        if not data:
-            break
-        else:
-            request_type = data.split(',')[0]
-            client_thread = threading.Thread(target=handle_request, args=(request_type, data, addr))
-            client_thread.start()
-            client_thread.join()
-
+        request_type = data.split(",")[0]
+        threading.Thread(target=handle_request, args=(request_type, data, addr)).start()
     except socket.timeout:
         pass
 
