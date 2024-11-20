@@ -68,6 +68,7 @@ def user_registration(request_number):
   ip = socket.gethostbyname(socket.gethostname())
   udp = client_port
   tcp = client_TCP_port
+  status = "Registered"
   msg = f"REGISTER, {str(request_number)}, {name}, {ip}, {udp}, {tcp}"
   global is_registered 
   is_registered = True #TODO: only a temporary solution for now, eventually we should wait for the server's response to set this value to true.
@@ -77,6 +78,7 @@ def user_registration(request_number):
 def user_deregistration(request_number):
   name = input(f"Enter the name of the user to be de-registered: ")
   msg = f"DE-REGISTER, {name}"
+  status = "Deregistered"
   global is_registered 
   is_registered = False
   return msg

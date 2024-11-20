@@ -1,3 +1,4 @@
+from enum import Enum
 import socket
 import threading #Threading library to make the server multi-threaded
 import sys
@@ -6,6 +7,12 @@ import json
 #Defining the socket parameters
 HOST = '0.0.0.0' #listening on all available netwrok interfaces
 PORT = 5000 #arbitrary port number chosen for the server socket
+
+# User Status
+class UserStatus(Enum):
+    REGISTERED = "Registered"
+    DEREGISTERED = "Deregistered"
+    IDLE = "Idle"
 
 #Creating the UDP socket
 try:
@@ -66,8 +73,10 @@ def handle_registration(data, addr):
       users[name] = {
         "ip": ip,
         "udp": udp,
-        "tcp": tcp
+        "tcp": tcp,
+        "status": UserStatus.REGISTERED.name
       }
+
       #Save the user info in the users.json file
       with open('users.json', 'w') as json_file:
           json.dump(users, json_file, indent=4)
@@ -82,19 +91,28 @@ def handle_registration(data, addr):
   s.sendto(reply_msg.encode('utf-8'), addr)
   print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
+
 #Handles the de-registration request 
 def handle_deregistration(data, addr):
-  request_type, name = data.split(", ") 
+  request_type, request_number, name, ip, udp, tcp = data.split(", ") #splitting the data into the different fields provided
 
   #Acquiring the lock before modifying the 'users' dictionary
   lock.acquire()
   #Encapsulating the lock release within a try-finally to ensure its release even if an error occurs
   try:
     if name in users:
-      del users[name] #Deleting the user from the dictionary of users
+
+      users[name] = {
+        "ip": ip,
+        "udp": udp,
+        "tcp": tcp,
+        "status": UserStatus.DEREGISTERED.name
+      }
+
       # Updating the users.json file with the changes user changes
       with open('users.json', 'w') as json_file:
           json.dump(users, json_file, indent=4)
+
       reply_msg = f"User [{name}] was successfully removed from the server!\n"
     else:
       reply_msg = f"User [{name}] does not exist in the server!"
