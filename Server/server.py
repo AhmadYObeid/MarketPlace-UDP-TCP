@@ -84,7 +84,7 @@ def handle_registration(data, addr):
 
 #Handles the de-registration request 
 def handle_deregistration(data, addr):
-  request_type, name = data.split(", ") 
+  request_type,request_number, name = data.split(", ")
 
   #Acquiring the lock before modifying the 'users' dictionary
   lock.acquire()
@@ -95,9 +95,9 @@ def handle_deregistration(data, addr):
       # Updating the users.json file with the changes user changes
       with open('users.json', 'w') as json_file:
           json.dump(users, json_file, indent=4)
-      reply_msg = f"User [{name}] was successfully removed from the server!\n"
+      reply_msg = f"[{request_number}], User [{name}] was successfully removed from the server!\n"
     else:
-      reply_msg = f"User [{name}] does not exist in the server!"
+      reply_msg = f"[{request_number}], User [{name}] does not exist in the server!\n"
   finally:
     lock.release() #Releasing the lock after successful modification
 
