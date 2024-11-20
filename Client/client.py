@@ -1,13 +1,15 @@
-import socket 
+import random
+import socket
 import sys
+import threading
 import json
-import time #library used to simulate simutanous client reqeuest sent to 
+import time #library used to simulate simutanous client reqeuest sent to
             #the server for multi-threading test purposes.
             #It can also be used to set timers for client offers.
 
 #defining the socket parameters (IP + PORT)
 client_host = "0.0.0.0" #listening on all available netwrok interfaces
-client_port = 2000 #arbitrary port number for the client socket
+client_port = random.randint(1000,9999) #arbitrary port number for the client socket
 #defining the TCP port number for testing purposes
 client_TCP_port = 2100 #arbitrary number for now
 
@@ -38,12 +40,12 @@ server_port = 5000
 #Variable to track the registration status of the client
 #Used to allow the users to use some functions only if they are registered
 is_registered = False
- 
+
 #Swtich statement to handle different user requests
 def user_request(user_input):
     match user_input:
       case 1:
-        return user_registration(request_number) 
+        return user_registration(request_number)
       case 2:
         return user_deregistration(request_number)
       case 3:
@@ -59,7 +61,7 @@ def user_registration(request_number):
   udp = client_port
   tcp = client_TCP_port
   msg = f"REGISTER, {str(request_number)}, {name}, {ip}, {udp}, {tcp}"
-  global is_registered 
+  global is_registered
   is_registered = True #TODO: only a temporary solution for now, eventually we should wait for the server's response to set this value to true.
   return msg
 
@@ -70,7 +72,7 @@ def user_deregistration(request_number):
   udp = client_port
   tcp = client_TCP_port
   msg = f"DE-REGISTER, {str(request_number)}, {name}, {ip}, {udp}, {tcp}"
-  global is_registered 
+  global is_registered
   is_registered = False
   return msg
 
@@ -90,7 +92,7 @@ def looking_for(reqeuest_number):
     return msg
   else:
     return None
-    
+
 
 # #just a method to test multi request transmission (uncomment to use)
 # def test_multiThreading():
@@ -101,38 +103,37 @@ def looking_for(reqeuest_number):
 #   msg = f"REGISTER, {str(request_number)}, {name}, {ip}, {udp}, {tcp}"
 #   return msg
 
-#Sending a message to the server
+def receive_messages():
+    while True:
+        try:
+            d = s.recvfrom(1024)
+            reply = d[0].decode('utf-8')
+            addr = d[1]
+            print(f"\nServer reply [{addr[0]}, {addr[1]}]: {reply}\n")
+        except socket.error as msg:
+            print("Error Occurred!")
+
+receive_thread = threading.Thread(target=receive_messages)
+receive_thread.daemon = True
+receive_thread.start()
+
+# Sending a message to the server
 while True:
-#   #Prompting the user to choose a feature offered by the shopping system
-  user_input = int(input(f"""Please choose one of the options below:\n
-  [1] - Register
-  [2] - De-Register
-  [3] - Look for an Item
-                
-->"""))
-  
-#   #Processing the user's input and saving it 
-  request_msg = user_request(user_input)
-  
-  # num_requests = 2 #Arbitrary number of requests to send multiple requests at once
-  if (request_msg != None):
-    try:
-        s.sendto(request_msg.encode('utf-8'), (server_host,server_port)) #the string message is encoded into bytes before being sent to the server using the utf-8 encoding standard
-        request_number += 1 #incrementing the request number for the next requests to be sent
-        update_request_number(request_number) #updating the client_config.json file with the newest request number
+    user_input = int(input(f"""Please choose one of the options below:\n
+    [1] - Register
+    [2] - De-Register
+    [3] - Look for an Item
 
-        #storing the reply message of the server upon receiving the client request
-        d = s.recvfrom(1024)
-        reply = d[0].decode('utf-8') #Decode the message provided by the server into a string using the utf-8 decoding standard
-        addr = d[1]
+-> """))
 
-        #displaying the server's reply message
-        print(f"\nServer reply [{addr[0]}, {addr[1]}]: {reply}\n")
+    request_msg = user_request(user_input)
 
-        #small delay between requests to simulate a new client request
-        #time.sleep(0.1)
-
-    except socket.error as msg:
-      print("Error Occured!")
-  else:
-    print("User not registered! Please register first.")
+    if request_msg is not None:
+        try:
+            s.sendto(request_msg.encode('utf-8'), (server_host, server_port))
+            request_number += 1
+            update_request_number(request_number)
+        except socket.error as msg:
+            print("Error Occurred!")
+    else:
+        print("User not registered! Please register first.")

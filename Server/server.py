@@ -84,7 +84,7 @@ def handle_registration(data, addr):
 
 #Handles the de-registration request 
 def handle_deregistration(data, addr):
-  request_type,request_number, name = data.split(", ")
+  request_type,request_number, name, ip, udp, tcp = data.split(", ")
 
   #Acquiring the lock before modifying the 'users' dictionary
   lock.acquire()
@@ -150,6 +150,7 @@ while True:
   
   except socket.timeout:
     pass #Continues to the next iteration without performing any error handling action
-
+  except Exception as e:
+    print(f"An error occurred: {e}")
 #closing the UDP socket
 s.close()
