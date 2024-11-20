@@ -76,7 +76,6 @@ def handle_registration(data, addr):
         "tcp": tcp,
         "status": UserStatus.REGISTERED.name
       }
-
       #Save the user info in the users.json file
       with open('users.json', 'w') as json_file:
           json.dump(users, json_file, indent=4)
@@ -90,7 +89,6 @@ def handle_registration(data, addr):
   #Sending the handled request message back to the client
   s.sendto(reply_msg.encode('utf-8'), addr)
   print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
-
 
 #Handles the de-registration request 
 def handle_deregistration(data, addr):
@@ -115,7 +113,7 @@ def handle_deregistration(data, addr):
 
       reply_msg = f"User [{name}] was successfully removed from the server!\n"
     else:
-      reply_msg = f"User [{name}] does not exist in the server!"
+      reply_msg = f"[{request_number}], User [{name}] does not exist in the server!\n"
   finally:
     lock.release() #Releasing the lock after successful modification
 

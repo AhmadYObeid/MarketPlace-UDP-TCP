@@ -11,25 +11,15 @@ client_port = 2000 #arbitrary port number for the client socket
 #defining the TCP port number for testing purposes
 client_TCP_port = 2100 #arbitrary number for now
 
+request_number = 0
 #Loads the current value of the request_number from the client_config.json file
-def load_request_number():
-  try:
-    with open('client_config.json', 'r') as json_file:
-      data = json.load(json_file)
-      return data
-  except FileNotFoundError:
-    return 1 #returns 1 if file is not exisiting yet, meaning we are starting fresh
-  except json.JSONDecodeError:
-    return 1 #returns 1 if the file exists but is empty 
 
 #Updates the request_number in the client_config.json file
 #Called everytime a request is sent to the server
 def update_request_number(request_number):
-  with open("client_config.json", "w") as json_file:
-    json.dump(request_number, json_file, indent=4)
+  request_number += request_number
 
 #Initializing the request_number by loading the current request_number from the config file
-request_number = load_request_number()
 
 #Creating the UDP clinet socket
 try:
@@ -77,8 +67,11 @@ def user_registration(request_number):
 #Prepares the de-registration request message to be sent to the server
 def user_deregistration(request_number):
   name = input(f"Enter the name of the user to be de-registered: ")
-  msg = f"DE-REGISTER, {name}"
+  ip = socket.gethostbyname(socket.gethostname())
+  udp = client_port
+  tcp = client_TCP_port
   status = "Deregistered"
+  msg = f"DE-REGISTER, {str(request_number)}, {name}, {ip}, {udp}, {tcp}"
   global is_registered 
   is_registered = False
   return msg
