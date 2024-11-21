@@ -69,7 +69,20 @@ def handle_registration(data, addr):
   #Encapsulating the lock release within a try-finally to ensure its release even if an error occurs
   try:
     if name not in users:
-    #Adding the user into the users dictionary
+    #Adding the user into the users dictionary   
+      users[name] = {
+        "ip": ip,
+        "udp": udp,
+        "tcp": tcp,
+        "status": UserStatus.REGISTERED.name
+      }
+            #Save the user info in the users.json file
+      with open('users.json', 'w') as json_file:
+          json.dump(users, json_file, indent=4)
+
+      reply_msg = f"REGISTERED, {request_number}"
+
+    elif name in users and users[name]["status"] == UserStatus.DEREGISTERED.name and users[name]["udp"] == udp:
       users[name] = {
         "ip": ip,
         "udp": udp,
@@ -81,6 +94,7 @@ def handle_registration(data, addr):
           json.dump(users, json_file, indent=4)
 
       reply_msg = f"REGISTERED, {request_number}"
+    
     else:
       reply_msg = f"REGISTER-DENIED, {request_number}, The user already exists in the system!"
   finally:
@@ -92,13 +106,14 @@ def handle_registration(data, addr):
 
 #Handles the de-registration request 
 def handle_deregistration(data, addr):
+
   request_type, request_number, name, ip, udp, tcp = data.split(", ") #splitting the data into the different fields provided
 
   #Acquiring the lock before modifying the 'users' dictionary
   lock.acquire()
   #Encapsulating the lock release within a try-finally to ensure its release even if an error occurs
   try:
-    if name in users:
+    if name in users and users[name]["status"] == UserStatus.REGISTERED.name and users[name]["udp"] == udp:
 
       users[name] = {
         "ip": ip,
@@ -111,7 +126,9 @@ def handle_deregistration(data, addr):
       with open('users.json', 'w') as json_file:
           json.dump(users, json_file, indent=4)
 
-      reply_msg = f"User [{name}] was successfully removed from the server!\n"
+      reply_msg = f"User [{name}] was successfully deregistered from the server!\n"
+    elif users[name]["udp"] != udp:
+      reply_msg = f"[{request_number}], You do not have access to this User: [{name}]!\n"
     else:
       reply_msg = f"[{request_number}], User [{name}] does not exist in the server!\n"
   finally:
@@ -125,7 +142,7 @@ def handle_deregistration(data, addr):
 def handle_looking_for(data, addr):
   request_type, reqeuest_number, name, item_name, item_description, max_price = data.split(", ")
   #Preparing the reply message to be sent to all client of the system
-  search_msg = f"SEARCH, RQ#, {item_name}, {item_description}"
+  search_msg = f"SEARCH, RQ# (TO THIS LATER DONT FORGET), {item_name}, {item_description}"
 
   print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
@@ -134,7 +151,7 @@ def handle_looking_for(data, addr):
 
   try:
     for user in users:
-      if user != name:
+      if user != name and users[user]["status"] == UserStatus.REGISTERED.name:
         #Sending the search message to all clients except the buyer
         s.sendto(search_msg.encode('utf-8'), (users[user]["ip"], int(users[user]["udp"])))
       else:
@@ -166,6 +183,7 @@ while True:
   
   except socket.timeout:
     pass #Continues to the next iteration without performing any error handling action
-
+  except Exception as e:
+    print(f"An error occurred: {e}")
 #closing the UDP socket
 s.close()
