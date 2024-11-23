@@ -15,7 +15,7 @@ client_port = 4444  # arbitrary port number for the client socket
 # defining the TCP port number for testing purposes
 client_TCP_port = 5555 # arbitrary number for now
 
-request_number = 0
+request_number = 1
 # Loads the current value of the request_number from the client_config.json file
 
 
@@ -49,7 +49,7 @@ except FileNotFoundError:
         {}
     ) 
 # Socket parameters of the server socket
-server_host = IP_json.get("ip")
+server_host = IP_json["Server"]["ip"]
 server_port = 5000
 
 # Variable to track the registration status of the client
@@ -80,7 +80,7 @@ def user_registration(request_number):
     ip = socket.gethostbyname(socket.gethostname())
     udp = client_port
     tcp = client_TCP_port
-    msg = f"REGISTER, {str(request_number)} (FIX IT SO THAT THE SERVER HAS ITS OWN RQ numbering), {name}, {ip}, {udp}, {tcp}"  # TODO: only a temporary solution for now, eventually we should wait for the server's response to set this value to true.
+    msg = f"REGISTER, {str(request_number)}, {name}, {ip}, {udp}, {tcp}"  # TODO: only a temporary solution for now, eventually we should wait for the server's response to set this value to true.
     user_name = name
     return msg
 
