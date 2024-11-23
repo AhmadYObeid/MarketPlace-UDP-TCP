@@ -151,7 +151,7 @@ def handle_deregistration(data, addr):
                 json.dump(users, json_file, indent=4)
 
             reply_msg = f"DEREGISTERED, [{name}] from the server!\n"
-        elif users[name]["udp"] != udp:
+        elif users[name]["ip"] != ip:
             reply_msg = (
                 f"[{request_number}], You do not have access to this User: [{name}]!\n"
             )

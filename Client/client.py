@@ -19,9 +19,6 @@ request_number = 0
 # Loads the current value of the request_number from the client_config.json file
 
 
-
-
-
 # Updates the request_number in the client_config.json file
 # Called everytime a request is sent to the server
 def update_request_number(request_number):
@@ -52,7 +49,7 @@ except FileNotFoundError:
         {}
     ) 
 # Socket parameters of the server socket
-server_host = IP_json[1]["ip"]
+server_host = IP_json.get("ip")
 server_port = 5000
 
 # Variable to track the registration status of the client
