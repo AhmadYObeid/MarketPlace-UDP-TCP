@@ -12,7 +12,6 @@ import time  # library used to simulate simutanous client reqeuest sent to
 # defining the socket parameters (IP + PORT)
 client_host = "0.0.0.0"  # listening on all available netwrok interfaces
 client_port = 4444  # arbitrary port number for the client socket
-# defining the TCP port number for testing purposes
 client_TCP_port = 5555 # arbitrary number for now
 
 request_number = 1
