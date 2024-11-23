@@ -11,12 +11,15 @@ import time  # library used to simulate simutanous client reqeuest sent to
 
 # defining the socket parameters (IP + PORT)
 client_host = "0.0.0.0"  # listening on all available netwrok interfaces
-client_port = random.randint(1000, 9999)  # arbitrary port number for the client socket
+client_port = 4444  # arbitrary port number for the client socket
 # defining the TCP port number for testing purposes
-client_TCP_port = 2100  # arbitrary number for now
+client_TCP_port = 5555 # arbitrary number for now
 
 request_number = 0
 # Loads the current value of the request_number from the client_config.json file
+
+
+
 
 
 # Updates the request_number in the client_config.json file
@@ -37,8 +40,19 @@ except socket.error:
 # Binding the socket to its parameters
 s.bind((client_host, client_port))
 
+
+try:
+    with open("Server_IP.json", "r") as json_file:
+        IP_json = json.load(
+            json_file
+        )  # loading the json file users' info into the dictionary of users
+
+except FileNotFoundError:
+    IP_json = (
+        {}
+    ) 
 # Socket parameters of the server socket
-server_host = "localhost"
+server_host = IP_json[1]["ip"]
 server_port = 5000
 
 # Variable to track the registration status of the client
@@ -69,7 +83,7 @@ def user_registration(request_number):
     ip = socket.gethostbyname(socket.gethostname())
     udp = client_port
     tcp = client_TCP_port
-    msg = f"REGISTER, {str(request_number)}, {name}, {ip}, {udp}, {tcp}"  # TODO: only a temporary solution for now, eventually we should wait for the server's response to set this value to true.
+    msg = f"REGISTER, {str(request_number)} (FIX IT SO THAT THE SERVER HAS ITS OWN RQ numbering), {name}, {ip}, {udp}, {tcp}"  # TODO: only a temporary solution for now, eventually we should wait for the server's response to set this value to true.
     user_name = name
     return msg
 
@@ -113,7 +127,6 @@ def recieve_logic(reply):
 
 
 # start of the logic of constantly listening for messages from the server
-
 
 def receive_messages():
     while True:

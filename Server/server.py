@@ -98,7 +98,7 @@ def handle_registration(data, addr):
         elif (
             name in users
             and users[name]["status"] == UserStatus.DEREGISTERED.name
-            and users[name]["udp"] == udp
+            and users[name]["ip"] == ip
         ):
             users[name] = {
                 "ip": ip,
@@ -136,7 +136,7 @@ def handle_deregistration(data, addr):
         if (
             name in users
             and users[name]["status"] == UserStatus.REGISTERED.name
-            and users[name]["udp"] == udp
+            and users[name]["ip"] == ip
         ):
 
             users[name] = {
