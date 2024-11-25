@@ -1,13 +1,16 @@
 import json
 import socket
+import random
 import sys
 import threading  # Threading library to make the server multi-threaded
+import time
 from enum import Enum
 
 # Defining the socket parameters
 HOST = "0.0.0.0"  # listening on all available netwrok interfaces
 PORT = 5000  # arbitrary port number chosen for the server socket
 
+num_list = []
 
 # User Status
 class UserStatus(Enum):
@@ -43,6 +46,39 @@ s.settimeout(5)
 
 
 # Implements a switch statement to handle the different requests coming from the client
+try:
+    with open("users.json", "r") as json_file:
+        users = json.load(
+            json_file
+)  # loading the json file users' info into the dictionary of users
+
+except FileNotFoundError:
+    users = (
+        {}
+    )  # JSON file does not exist, meaning no users have registred yet, therefore we start fresh
+
+try:
+    with open("Wanted_Items.json", "r") as json_file:
+        wanted_items = json.load(
+            json_file
+        )
+except FileNotFoundError:
+    wanted_items = (
+        {}
+    )
+
+try:
+    with open("Offers.json", "r") as json_file:
+        offers = json.load(
+            json_file
+        )
+except FileNotFoundError:
+    offers = (
+        {}
+    )
+# Creating a dictionary to store the users information within the server (the dictionary is restored using the json file everytime the server runs again)
+lock = threading.Lock()
+# Creating a mutex lock to avoid race conditions for the users.json file
 def handle_request(user_request, data, addr):
     match user_request:
         case "REGISTER":
@@ -51,27 +87,12 @@ def handle_request(user_request, data, addr):
             return handle_deregistration(data, addr)
         case "LOOKING_FOR":
             return handle_looking_for(data, addr)
+        case "MAKE_OFFER":
+            return handle_make_offer(data, addr)
         case _:
             print("Invalid Request!")
 
 
-# Creating a dictionary to store the users information within the server (the dictionary is restored using the json file everytime the server runs again)
-try:
-    with open("users.json", "r") as json_file:
-        users = json.load(
-            json_file
-        )  # loading the json file users' info into the dictionary of users
-
-except FileNotFoundError:
-    users = (
-        {}
-    )  # JSON file does not exist, meaning no users have registred yet, therefore we start fresh
-
-# Creating a mutex lock to avoid race conditions for the users.json file
-lock = threading.Lock()
-
-
-# Handles the register request
 def handle_registration(data, addr):
     request_type, request_number, name, ip, udp, tcp = data.split(
         ", "
@@ -97,7 +118,6 @@ def handle_registration(data, addr):
 
         elif (
             name in users
-            and users[name]["status"] == UserStatus.DEREGISTERED.name
             and users[name]["ip"] == ip
         ):
             users[name] = {
@@ -120,9 +140,9 @@ def handle_registration(data, addr):
     # Sending the handled request message back to the client
     s.sendto(reply_msg.encode("utf-8"), addr)
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
+# Handles the register request
 
 
-# Handles the de-registration request
 def handle_deregistration(data, addr):
 
     request_type, request_number, name, ip, udp, tcp = data.split(
@@ -165,22 +185,54 @@ def handle_deregistration(data, addr):
     # Sending the handled request message back to the client
     s.sendto(reply_msg.encode("utf-8"), addr)
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
+# Handles the de-registration request
+
+def item_id_generator():
+    random_num = random.randint(1000, 9999)
+
+    if random_num in num_list:
+        item_id_generator()
+
+    num_list.append(random_num)
+    return random_num
 
 
+
+# THE FOLLOWING IS A DANGEROUS EXPERIMENTAL CODE WITH A SEVERE LOGICAL ERROR
+############################################################################################################
 # Handles the looking_for request
+def wait_and_compare(item_id):
+    # 5 minutes timer to wait for offers
+    time.sleep(30)
+    best_price = compare_prices(item_id)
+    print(f"Best Price: {best_price}")
+
 def handle_looking_for(data, addr):
     request_type, reqeuest_number, name, item_name, item_description, max_price = (
         data.split(", ")
     )
+    item_id = item_id_generator()
+
+
     # Preparing the reply message to be sent to all client of the system
     search_msg = (
-        f"SEARCH, RQ# (TO THIS LATER DONT FORGET), {item_name}, {item_description}"
+        f"SEARCH, {reqeuest_number}, {item_name}, {item_description}, {item_id}"
     )
 
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
     # Acquiring the lock before reading from the users dictionary
     lock.acquire()
+
+    wanted_items[item_id] = {
+        "request_number": reqeuest_number,
+        "item_name": item_name,
+        "item_description": item_description,
+        "max_price": max_price,
+        "buyer": name,
+    }
+    with open("Wanted_Items.json", "w") as json_file:
+        json.dump(wanted_items, json_file, indent=4)
 
     try:
         for user in users:
@@ -195,13 +247,66 @@ def handle_looking_for(data, addr):
     finally:
         lock.release()
 
-    # TODO: add the reply_msg to the client here.
+def handle_make_offer(data, addr):
+
+    request_type, reqeuest_number, name, item_id, price = (
+        data.split(", ")
+    )
+    lock.acquire()
+    try:
+        if item_id in offers:
+            offers[item_id].append({
+                "request_number": reqeuest_number,
+                "price": price,
+                "seller": name,
+            })
+        else:
+            offers[item_id] = [{
+                "request_number": reqeuest_number,
+                "price": price,
+                "seller": name,
+            }]
+
+        with open("Offers.json", "w") as json_file:
+            json.dump(offers, json_file, indent=4)
+    finally:
+        lock.release()
+
+    print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
+
+
+
+def compare_prices(item_id):
+    lowest_offer = {"price": float("inf"), "seller": None}
+
+    lock.acquire()
+
+    try:
+        with open("Offers.json", "r") as json_file:
+            offers = json.load(
+                json_file
+            )
+    except FileNotFoundError:
+        offers = (
+            {}
+        )
+
+    try:
+        if item_id in offers:
+            for offer in offers[item_id]:
+                price = float(offer["price"])
+                name = offer["seller"]
+                print(f"Price: {price}, Seller: {name}")
+    finally:
+        lock.release()
+
+##############################################################################################################################
+
 
 
 # Listening for client requests indefinitely
 while True:
     try:
-
         d = s.recvfrom(
             1024
         )  # receiving the data from the client with a buffer size of 1024 bytes

@@ -137,9 +137,8 @@ def make_offer(request_number):
         name = user_name
         print("What item are you making an offer for:")
         item_id = input("Item ID: ")
-        item_name = input("Item Name: ")
         price = input("Price: ")
-        msg = f"MAKE_OFFER, {str(request_number)}, {name}, {item_name}, {item_id}, {price}"
+        msg = f"MAKE_OFFER, {str(request_number)}, {name}, {item_id}, {price}"
         return msg
     else:
         return None
