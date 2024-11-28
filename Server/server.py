@@ -41,23 +41,9 @@ print("Socket was successfully bound!\n")
 s.settimeout(5)
 
 # Load or initialize data
-try:
-    with open("users.json", "r") as json_file:
-        users = json.load(json_file)
-except FileNotFoundError:
-    users = {}
 
-try:
-    with open("Wanted_Items.json", "r") as json_file:
-        wanted_items = json.load(json_file)
-except FileNotFoundError:
-    wanted_items = {}
 
-try:
-    with open("Offers.json", "r") as json_file:
-        offers = json.load(json_file)
-except FileNotFoundError:
-    offers = {}
+
 
 # Creating a mutex lock to avoid race conditions
 lock = threading.Lock()
@@ -80,6 +66,11 @@ def handle_registration(data, addr):
     request_type, request_number, name, ip, udp, tcp = data.split(", ")
     lock.acquire()
     try:
+        try:
+            with open("users.json", "r") as json_file:
+                users = json.load(json_file)
+        except FileNotFoundError:
+            users = {}
         if name not in users:
             users[name] = {
                 "ip": ip,
@@ -113,6 +104,11 @@ def handle_deregistration(data, addr):
     request_type, request_number, name, ip, udp, tcp = data.split(", ")
     lock.acquire()
     try:
+        try:
+            with open("users.json", "r") as json_file:
+                users = json.load(json_file)
+        except FileNotFoundError:
+            users = {}
         if (
             name in users
             and users[name]["status"] == UserStatus.REGISTERED.name
@@ -121,7 +117,7 @@ def handle_deregistration(data, addr):
             users[name]["status"] = UserStatus.DEREGISTERED.name
             with open("users.json", "w") as json_file:
                 json.dump(users, json_file, indent=4)
-            reply_msg = f"DEREGISTERED, [{name}] from the server!"
+            reply_msg = f"DEREGISTERED, [{request_number}], [{name}] from the server!"
         elif name in users and users[name]["ip"] != ip:
             reply_msg = f"[{request_number}], You do not have access to this User: [{name}]!"
         else:
@@ -155,6 +151,11 @@ def handle_looking_for(data, addr):
     # Update wanted_items
     lock.acquire()
     try:
+        try:
+            with open("Wanted_Items.json", "r") as json_file:
+                wanted_items = json.load(json_file)
+        except FileNotFoundError:
+            wanted_items = {}
         wanted_items[item_id] = {
             "request_number": request_number,
             "item_name": item_name,
@@ -169,6 +170,11 @@ def handle_looking_for(data, addr):
 
     # Broadcast the search message to all other clients
     try:
+        try:
+            with open("users.json", "r") as json_file:
+                users = json.load(json_file)
+        except FileNotFoundError:
+            users = {}
         for user in users:
             if user != name and users[user]["status"] == UserStatus.REGISTERED.name:
                 s.sendto(
@@ -179,13 +185,21 @@ def handle_looking_for(data, addr):
         lock.release()
 
     # Start wait_and_compare in a new thread
-    threading.Thread(target=wait_and_compare, args=(item_id,)).start()
+    threading.Thread(target=wait_offer_handler, args=(item_id,)).start()
 
 # Handles the make_offer request
 def handle_make_offer(data, addr):
     request_type, request_number, name, item_id, price = data.split(", ")
+
     lock.acquire()
+
     try:
+        try:
+            with open("Offers.json", "r") as json_file:
+                offers = json.load(json_file)
+        except FileNotFoundError:
+            offers = {}
+
         if item_id in offers:
             offers[item_id].append({
                 "request_number": request_number,
@@ -207,32 +221,99 @@ def handle_make_offer(data, addr):
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
 # Waits for offers and compares them after the waiting period
-def wait_and_compare(item_id):
+def wait_offer_handler(item_id):
     # Wait for 5 minutes (300 seconds)
     time.sleep(60)
 
     best_offer = compare_prices(item_id)
+
+    item = fetch_item_data(item_id)
+    buyer = fetch_user_data(item["buyer"])
+
+
     if best_offer:
         print(f"Best Offer for item {item_id}: {best_offer}")
-        # Notify buyer and seller (you can implement notification logic here)
+
+        seller = fetch_user_data(best_offer["seller"])
+
+        if float(best_offer["price"]) <= float(item["max_price"]):
+
+            # Notify buyer and seller
+
+            #send the reserve message to the seller
+            Reserve_msg = f"RESERVE, {item['request_number']}, {item_id}, {item['item_name']}, {best_offer['price']}"
+            s.sendto(Reserve_msg.encode("utf-8"), (seller["ip"], int(seller["udp"])))
+
+
+            #send found msg to buyer
+            found_msg = f"FOUND, {item['request_number']}, {item_id}, {item['item_name']}, {best_offer['price']}"
+            s.sendto(found_msg.encode("utf-8"), (buyer["ip"], int(buyer["udp"])))
+
+        elif float(best_offer["price"]) > float(item["max_price"]):
+            # negotiate with the seller
+            negotiation_msg = f"NEGOTIATE, {item['request_number']}, {item_id}, {item['item_name']}, {item['max_price']}"
+            s.sendto(negotiation_msg.encode("utf-8"), (seller["ip"], int(seller["udp"])))
+
+
     else:
-        print(f"No offers received for item {item_id}")
+        not_available_msg = f"NOT-AVAILABLE, {item['request_number']}, {item_id}, {item['item_name']}, {item['max_price']}"
+        s.sendto(not_available_msg.encode("utf-8"), (buyer["ip"], int(buyer["udp"])))
+
 
 # Compares offers to find the lowest price
 def compare_prices(item_id):
     lock.acquire()
     try:
-        with open("Offers.json", "r") as json_file:
-            all_offers = json.load(json_file)
+        # Read the offers from 'Offers.json'
+        try:
+            with open("Offers.json", "r") as json_file:
+                offers = json.load(json_file)
+        except FileNotFoundError:
+            offers = {}
+
+        if item_id in offers:
+            offers_list = offers[item_id]
+            # Find the best offer based on the lowest price
+            best_offer = min(offers_list, key=lambda x: float(x["price"]))
+
+            # Update the offers to keep only the best offer
+            offers[item_id] = [best_offer]
+
+            # Write the updated offers back to the JSON file
+            with open("Offers.json", "w") as json_file:
+                json.dump(offers, json_file, indent=4)
+
+            return best_offer
+        else:
+            return None
     finally:
         lock.release()
 
-    if item_id in all_offers:
-        offers_list = all_offers[item_id]
-        best_offer = min(offers_list, key=lambda x: float(x["price"]))
-        return best_offer
-    else:
-        return None
+
+def fetch_item_data(item_id):
+    lock.acquire()
+    try:
+        with open("Wanted_Items.json", "r") as json_file:
+            wanted_items = json.load(json_file)
+    finally:
+        lock.release()
+
+    return wanted_items[item_id]
+
+def fetch_user_data(user_name):
+    lock.acquire()
+    try:
+        try:
+            with open("users.json", "r") as json_file:
+                users = json.load(json_file)
+        except FileNotFoundError:
+            users = {}
+    finally:
+        lock.release()
+
+    return users[user_name]
+
+
 
 # Main server loop
 while True:

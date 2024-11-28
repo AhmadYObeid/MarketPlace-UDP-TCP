@@ -82,6 +82,10 @@ def user_request(user_input):
             return looking_for(request_number)
         case 4:
             return make_offer(request_number)
+        # case 5:
+        #     return make_offer(request_number)
+        # case 6:
+        #     return make_offer(request_number)
         case _:
             print(f"Invalid option! Please try again.")
 # Swtich statement to handle different user requests
@@ -181,7 +185,9 @@ while True:
     [2] - De-Register
     [3] - Look for an Item
     [4] - Make an Offer
-
+    [5] - Accpet/Reject an Offer
+    [6] - Buy/Cancel a Deal
+    
 -> """
         )
     )
