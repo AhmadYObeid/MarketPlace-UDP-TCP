@@ -18,6 +18,7 @@ class UserStatus(Enum):
     DEREGISTERED = "Deregistered"
     IDLE = "Idle"
 
+
 # Creating the UDP socket
 try:
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -27,6 +28,7 @@ except OSError as e:
         f"Failed to create the socket.\nError Code: {e.errno}\nMessage: {e.strerror}\n"
     )
     sys.exit()
+
 
 # Binding the socket to the host and port number
 try:
@@ -40,13 +42,9 @@ print("Socket was successfully bound!\n")
 # Setting a timeout for the socket
 s.settimeout(5)
 
-# Load or initialize data
-
-
-
-
 # Creating a mutex lock to avoid race conditions
 lock = threading.Lock()
+
 
 # User request handler
 def handle_request(user_request, data, addr):
@@ -58,8 +56,13 @@ def handle_request(user_request, data, addr):
         handle_looking_for(data, addr)
     elif user_request == "MAKE_OFFER":
         handle_make_offer(data, addr)
+    elif user_request == "ACCEPT":
+        handle_accept(data, addr)
+    elif user_request == "REFUSE":
+        handle_rejection(data, addr)
     else:
         print("Invalid Request!")
+
 
 # Handles the register request
 def handle_registration(data, addr):
@@ -99,6 +102,7 @@ def handle_registration(data, addr):
     s.sendto(reply_msg.encode("utf-8"), addr)
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
+
 # Handles the de-registration request
 def handle_deregistration(data, addr):
     request_type, request_number, name, ip, udp, tcp = data.split(", ")
@@ -110,9 +114,9 @@ def handle_deregistration(data, addr):
         except FileNotFoundError:
             users = {}
         if (
-            name in users
-            and users[name]["status"] == UserStatus.REGISTERED.name
-            and users[name]["ip"] == ip
+                name in users
+                and users[name]["status"] == UserStatus.REGISTERED.name
+                and users[name]["ip"] == ip
         ):
             users[name]["status"] = UserStatus.DEREGISTERED.name
             with open("users.json", "w") as json_file:
@@ -128,6 +132,7 @@ def handle_deregistration(data, addr):
     s.sendto(reply_msg.encode("utf-8"), addr)
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
+
 # Generate unique item ID
 def item_id_generator():
     while True:
@@ -135,6 +140,7 @@ def item_id_generator():
         if random_num not in num_list:
             num_list.append(random_num)
             return str(random_num)
+
 
 # Handles the looking_for request
 def handle_looking_for(data, addr):
@@ -187,6 +193,7 @@ def handle_looking_for(data, addr):
     # Start wait_and_compare in a new thread
     threading.Thread(target=wait_offer_handler, args=(item_id,)).start()
 
+
 # Handles the make_offer request
 def handle_make_offer(data, addr):
     request_type, request_number, name, item_id, price = data.split(", ")
@@ -220,16 +227,74 @@ def handle_make_offer(data, addr):
 
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
+
+
+#Handles Negotiation Response
+def handle_accept(data, addr):
+    request_type, request_number, item_id, item_name, item_price = data.split(", ")
+
+    item_details = fetch_item_data(item_id)
+    buyer_info = fetch_user_data(item_details["buyer"])
+    seller_info = fetch_user_data(item_details["seller"])
+
+    # Sending the FOUND message to the buyer
+    found_msg = f"FOUND, {request_number}, {item_id}, {item_name}, {item_details['max_price']}"
+    s.sendto(found_msg.encode("utf-8"), (buyer_info["ip"], int(buyer_info["udp"])))
+
+    Reserve_msg = f"RESERVE, {item_details['request_number']}, {item_id}, {item_details['item_name']}, {item_details['price']}"
+    s.sendto(Reserve_msg.encode("utf-8"), (seller_info["ip"], int(seller_info["udp"])))
+
+
+    print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
+
+
+def handle_rejection(data, addr):
+    request_type, request_number, item_id, item_name, item_price = data.split(", ")
+
+    item_details = fetch_item_data(item_id)
+    buyer_info = fetch_user_data(item_details["buyer"])
+
+    Refuse_msg = f"NOT-FOUND, {request_number}, {item_id}, {item_name}, {item_details['max_price']}"
+    s.sendto(Refuse_msg.encode("utf-8"), (buyer_info["ip"], int(buyer_info["udp"])))
+
+    print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
+
+
+def handle_buy(data, addr):
+    request_type, request_number, item_id, item_name, item_price = data.split(", ")
+
+
+    item_details = fetch_item_data(item_id)
+    buyer_info = fetch_user_data(item_details["buyer"])
+    seller_info = fetch_user_data(item_details["seller"])
+
+    print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
+
+    ##open tcp connection between buyer and seller
+
+
+
+def handle_cancel(data, addr):
+    request_type, request_number, item_id, item_name, item_price = data.split(", ")
+
+    item_details = fetch_item_data(item_id)
+    seller_info = fetch_user_data(item_details["seller"])
+
+    Refuse_msg = f"CANCEL, {request_number}, {item_id}, {item_name}, {item_details['max_price']}"
+    s.sendto(Refuse_msg.encode("utf-8"), (seller_info["ip"], int(seller_info["udp"])))
+
+
+    print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
+
 # Waits for offers and compares them after the waiting period
 def wait_offer_handler(item_id):
     # Wait for 5 minutes (300 seconds)
-    time.sleep(60)
+    time.sleep(15)
 
     best_offer = compare_prices(item_id)
 
     item = fetch_item_data(item_id)
     buyer = fetch_user_data(item["buyer"])
-
 
     if best_offer:
         print(f"Best Offer for item {item_id}: {best_offer}")
@@ -240,20 +305,25 @@ def wait_offer_handler(item_id):
 
             # Notify buyer and seller
 
-            #send the reserve message to the seller
+            # send the reserve message to the seller
             Reserve_msg = f"RESERVE, {item['request_number']}, {item_id}, {item['item_name']}, {best_offer['price']}"
             s.sendto(Reserve_msg.encode("utf-8"), (seller["ip"], int(seller["udp"])))
 
-
-            #send found msg to buyer
+            # send found msg to buyer
             found_msg = f"FOUND, {item['request_number']}, {item_id}, {item['item_name']}, {best_offer['price']}"
             s.sendto(found_msg.encode("utf-8"), (buyer["ip"], int(buyer["udp"])))
+
+            willing_to_negotiate_details = f"You can now Buy or Cancel the deal for this item: {item['item_name']}, {item_id}, at the price of {best_offer['price']}."
+            s.sendto(willing_to_negotiate_details.encode("utf-8"), (buyer["ip"], int(buyer["udp"])))
 
         elif float(best_offer["price"]) > float(item["max_price"]):
             # negotiate with the seller
             negotiation_msg = f"NEGOTIATE, {item['request_number']}, {item_id}, {item['item_name']}, {item['max_price']}"
             s.sendto(negotiation_msg.encode("utf-8"), (seller["ip"], int(seller["udp"])))
 
+            # another msg for the seller if they want to negotiate, given the details.
+            willing_to_negotiate_details = f"For this item: {item['item_name']}, {item_id}, the buyer is willing to pay  {item['max_price']}. Are you willing to sell it at their price?"
+            s.sendto(willing_to_negotiate_details.encode("utf-8"), (seller["ip"], int(seller["udp"])))
 
     else:
         not_available_msg = f"NOT-AVAILABLE, {item['request_number']}, {item_id}, {item['item_name']}, {item['max_price']}"
@@ -300,6 +370,7 @@ def fetch_item_data(item_id):
 
     return wanted_items[item_id]
 
+
 def fetch_user_data(user_name):
     lock.acquire()
     try:
@@ -314,7 +385,6 @@ def fetch_user_data(user_name):
     return users[user_name]
 
 
-
 # Main server loop
 while True:
     try:
@@ -327,7 +397,7 @@ while True:
         else:
             user_request = data.split(",")[0]
             client_thread = threading.Thread(
-                target=handle_request, args=(user_request, data , addr)
+                target=handle_request, args=(user_request, data, addr)
             )
             client_thread.start()
             # Removed client_thread.join() to prevent blocking

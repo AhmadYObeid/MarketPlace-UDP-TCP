@@ -12,16 +12,13 @@ import time  # library used to simulate simutanous client reqeuest sent to
 # defining the socket parameters (IP + PORT)
 client_host = "0.0.0.0"  # listening on all available netwrok interfaces
 client_port = 4444  # arbitrary port number for the client socket
-client_TCP_port = 5555 # arbitrary number for now
-
-
+client_TCP_port = 5555  # arbitrary number for now
 
 try:
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 except socket.error:
     print(f"Socket creation failed!")
     sys.exit()
-
 
 s.bind((client_host, client_port))
 
@@ -57,7 +54,6 @@ def get_server_ip():
 
 server_host = get_server_ip()
 
-
 # Socket parameters of the server socket
 server_port = 5000
 is_registered = False
@@ -65,6 +61,8 @@ is_registered = False
 # Variable to track the registration status of the client
 # Used to allow the users to use some functions only if they are registered
 user_name = None
+negotiation_items_info = {}
+found_items_info = {}
 
 
 def update_request_number(request_number):
@@ -82,12 +80,14 @@ def user_request(user_input):
             return looking_for(request_number)
         case 4:
             return make_offer(request_number)
-        # case 5:
-        #     return make_offer(request_number)
+        case 5:
+            return accept_refuse()
         # case 6:
         #     return make_offer(request_number)
         case _:
             print(f"Invalid option! Please try again.")
+
+
 # Swtich statement to handle different user requests
 
 
@@ -135,6 +135,7 @@ def looking_for(reqeuest_number):
     else:
         return None
 
+
 def make_offer(request_number):
     if is_registered == True:
         global user_name
@@ -146,16 +147,71 @@ def make_offer(request_number):
         return msg
     else:
         return None
+
+
+def accept_refuse():
+    if is_registered == True:
+        print("What item are you accepting/refusing the negotiation for:")
+        item_id = input("Item ID: ")
+
+        if item_id in negotiation_items_info:
+            request_number, item_name, price = negotiation_items_info[item_id]
+
+            accept = input("Do you want to accept the negotiation (Y/N): ")
+
+            if accept == "Y":
+                msg = f"ACCEPT, {request_number}, {item_id}, {item_name}, {price}"
+            elif accept == "N":
+                msg = f"REFUSE, {request_number}, {item_id}, {item_name}, {price}"
+            else:
+                print("Invalid input")
+        else:
+            print("Invalid item ID")
+
+        return msg
+    else:
+        return None
+
+
+def buy_cancel():
+    if is_registered == True:
+        print("What item are you buying/cancelling the deal for:")
+        item_id = input("Item ID: ")
+
+        if item_id in found_items_info:
+            request_number, item_name, price = found_items_info[item_id]
+            buy = input("Do you want to buy the item (Y/N): ")
+            if buy == "Y":
+                msg = f"BUY, {request_number}, {item_id}, {item_name}, {price}"
+            elif buy == "N":
+                msg = f"CANCEL, {request_number}, {item_id}, {item_name}, {price}"
+            else:
+                print("Invalid input")
+        else:
+            print("Invalid item ID")
+        return msg
+    else:
+        return None
+
+
 # checks the reply message from the server to determine if the user is registered or not
 # (we can add more logic here for other cases)
 def recieve_logic(reply):
     global is_registered
     feedback = reply
+
     if re.search(rf'\b{"REGISTERED"}\b', feedback):
         is_registered = True
     elif re.search(rf'\b{"DEREGISTERED"}\b', feedback):
         is_registered = False
 
+    if re.search(rf'\b{"NEGOTIATE"}\b', feedback):
+        request_type, request_number, item_id, item_name, max_price = feedback.split(", ")
+        negotiation_items_info[item_id] = (request_number, item_name, max_price)
+
+    if re.search(rf'\b{"FOUND"}\b', feedback):
+        request_type, request_number, item_id, item_name, price = feedback.split(", ")
+        found_items_info[item_id] = (request_number, item_name, price)
 
 # start of the logic of constantly listening for messages from the server
 
@@ -185,9 +241,9 @@ while True:
     [2] - De-Register
     [3] - Look for an Item
     [4] - Make an Offer
-    [5] - Accpet/Reject an Offer
+    [5] - Accept/Refuse an Offer
     [6] - Buy/Cancel a Deal
-    
+
 -> """
         )
     )
@@ -203,4 +259,4 @@ while True:
         except socket.error as msg:
             print("Error Occurred!")
     else:
-        print("User not registered! Please register first.")
+        print("User not registered! Please register first. (OR A msg doesnt exist to be sent.)")
