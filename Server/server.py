@@ -1,13 +1,16 @@
 import json
 import socket
+import random
 import sys
-import threading  # Threading library to make the server multi-threaded
+import threading
+import time
 from enum import Enum
 
 # Defining the socket parameters
-HOST = "0.0.0.0"  # listening on all available netwrok interfaces
+HOST = "0.0.0.0"  # listening on all available network interfaces
 PORT = 5000  # arbitrary port number chosen for the server socket
 
+num_list = []
 
 # User Status
 class UserStatus(Enum):
@@ -26,6 +29,7 @@ except OSError as e:
     )
     sys.exit()
 
+
 # Binding the socket to the host and port number
 try:
     s.bind((HOST, PORT))
@@ -33,201 +37,377 @@ except OSError as e:
     print(f"Binding failed!\nError Code: {e.errno}\nMessage: {e.strerror}\n")
     sys.exit()
 
-print("Socket was successfuly bound!\n")
+print("Socket was successfully bound!\n")
 
 # Setting a timeout for the socket
-# If no data is received within 2 seconds, the timeout exception is raised
-# This allows the program to escape from the infinite loop of recvfrom()
-# Used to allow KeyboardInterrupt to trigger
 s.settimeout(5)
 
-
-# Implements a switch statement to handle the different requests coming from the client
-def handle_request(user_request, data, addr):
-    match user_request:
-        case "REGISTER":
-            return handle_registration(data, addr)
-        case "DE-REGISTER":
-            return handle_deregistration(data, addr)
-        case "LOOKING_FOR":
-            return handle_looking_for(data, addr)
-        case _:
-            print("Invalid Request!")
-
-
-# Creating a dictionary to store the users information within the server (the dictionary is restored using the json file everytime the server runs again)
-try:
-    with open("users.json", "r") as json_file:
-        users = json.load(
-            json_file
-        )  # loading the json file users' info into the dictionary of users
-
-except FileNotFoundError:
-    users = (
-        {}
-    )  # JSON file does not exist, meaning no users have registred yet, therefore we start fresh
-
-# Creating a mutex lock to avoid race conditions for the users.json file
+# Creating a mutex lock to avoid race conditions
 lock = threading.Lock()
+
+
+# User request handler
+def handle_request(user_request, data, addr):
+    if user_request == "REGISTER":
+        handle_registration(data, addr)
+    elif user_request == "DE-REGISTER":
+        handle_deregistration(data, addr)
+    elif user_request == "LOOKING_FOR":
+        handle_looking_for(data, addr)
+    elif user_request == "MAKE_OFFER":
+        handle_make_offer(data, addr)
+    elif user_request == "ACCEPT":
+        handle_accept(data, addr)
+    elif user_request == "REFUSE":
+        handle_rejection(data, addr)
+    else:
+        print("Invalid Request!")
 
 
 # Handles the register request
 def handle_registration(data, addr):
-    request_type, request_number, name, ip, udp, tcp = data.split(
-        ", "
-    )  # splitting the data into the different fields provided
-    # TODO: Add the condition where the server cannot add any more clients
-    # Acquiring the lock before modifying the 'users' dictionary
+    request_type, request_number, name, ip, udp, tcp = data.split(", ")
     lock.acquire()
-    # Encapsulating the lock release within a try-finally to ensure its release even if an error occurs
     try:
+        try:
+            with open("users.json", "r") as json_file:
+                users = json.load(json_file)
+        except FileNotFoundError:
+            users = {}
         if name not in users:
-            # Adding the user into the users dictionary
             users[name] = {
                 "ip": ip,
                 "udp": udp,
                 "tcp": tcp,
                 "status": UserStatus.REGISTERED.name,
             }
-            # Save the user info in the users.json file
             with open("users.json", "w") as json_file:
                 json.dump(users, json_file, indent=4)
-
             reply_msg = f"REGISTERED, {request_number}"
-
-        elif (
-            name in users
-            and users[name]["status"] == UserStatus.DEREGISTERED.name
-            and users[name]["ip"] == ip
-        ):
+        elif users[name]["ip"] == ip:
             users[name] = {
                 "ip": ip,
                 "udp": udp,
                 "tcp": tcp,
                 "status": UserStatus.REGISTERED.name,
             }
-            # Save the user info in the users.json file
             with open("users.json", "w") as json_file:
                 json.dump(users, json_file, indent=4)
-
             reply_msg = f"REGISTERED, {request_number}"
-
         else:
             reply_msg = f"REGISTER-DENIED, {request_number}, The user already exists in the system!"
     finally:
-        lock.release()  # Releasing the lock after successful modification
+        lock.release()
 
-    # Sending the handled request message back to the client
     s.sendto(reply_msg.encode("utf-8"), addr)
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
 
 # Handles the de-registration request
 def handle_deregistration(data, addr):
-
-    request_type, request_number, name, ip, udp, tcp = data.split(
-        ", "
-    )  # splitting the data into the different fields provided
-
-    # Acquiring the lock before modifying the 'users' dictionary
+    request_type, request_number, name, ip, udp, tcp = data.split(", ")
     lock.acquire()
-    # Encapsulating the lock release within a try-finally to ensure its release even if an error occurs
     try:
+        try:
+            with open("users.json", "r") as json_file:
+                users = json.load(json_file)
+        except FileNotFoundError:
+            users = {}
         if (
-            name in users
-            and users[name]["status"] == UserStatus.REGISTERED.name
-            and users[name]["ip"] == ip
+                name in users
+                and users[name]["status"] == UserStatus.REGISTERED.name
+                and users[name]["ip"] == ip
         ):
-
-            users[name] = {
-                "ip": ip,
-                "udp": udp,
-                "tcp": tcp,
-                "status": UserStatus.DEREGISTERED.name,
-            }
-
-            # Updating the users.json file with the changes user changes
+            users[name]["status"] = UserStatus.DEREGISTERED.name
             with open("users.json", "w") as json_file:
                 json.dump(users, json_file, indent=4)
-
-            reply_msg = f"DEREGISTERED, [{name}] from the server!\n"
-        elif users[name]["ip"] != ip:
-            reply_msg = (
-                f"[{request_number}], You do not have access to this User: [{name}]!\n"
-            )
+            reply_msg = f"DEREGISTERED, [{request_number}], [{name}] from the server!"
+        elif name in users and users[name]["ip"] != ip:
+            reply_msg = f"[{request_number}], You do not have access to this User: [{name}]!"
         else:
-            reply_msg = (
-                f"[{request_number}], User [{name}] does not exist in the server!\n"
-            )
+            reply_msg = f"[{request_number}], User [{name}] does not exist in the server!"
     finally:
-        lock.release()  # Releasing the lock after successful modification
+        lock.release()
 
-    # Sending the handled request message back to the client
     s.sendto(reply_msg.encode("utf-8"), addr)
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
 
+# Generate unique item ID
+def item_id_generator():
+    while True:
+        random_num = random.randint(1000, 9999)
+        if random_num not in num_list:
+            num_list.append(random_num)
+            return str(random_num)
+
+
 # Handles the looking_for request
 def handle_looking_for(data, addr):
-    request_type, reqeuest_number, name, item_name, item_description, max_price = (
+    request_type, request_number, name, item_name, item_description, max_price = (
         data.split(", ")
     )
-    # Preparing the reply message to be sent to all client of the system
-    search_msg = (
-        f"SEARCH, RQ# (TO THIS LATER DONT FORGET), {item_name}, {item_description}"
-    )
+    item_id = item_id_generator()
+
+    # Prepare the search message
+    search_msg = f"SEARCH, {request_number}, {item_name}, {item_description}, {item_id}"
 
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
-    # Acquiring the lock before reading from the users dictionary
+    # Update wanted_items
     lock.acquire()
-
     try:
+        try:
+            with open("Wanted_Items.json", "r") as json_file:
+                wanted_items = json.load(json_file)
+        except FileNotFoundError:
+            wanted_items = {}
+        wanted_items[item_id] = {
+            "request_number": request_number,
+            "item_name": item_name,
+            "item_description": item_description,
+            "max_price": max_price,
+            "buyer": name,
+        }
+        with open("Wanted_Items.json", "w") as json_file:
+            json.dump(wanted_items, json_file, indent=4)
+    finally:
+        pass
+
+    # Broadcast the search message to all other clients
+    try:
+        try:
+            with open("users.json", "r") as json_file:
+                users = json.load(json_file)
+        except FileNotFoundError:
+            users = {}
         for user in users:
             if user != name and users[user]["status"] == UserStatus.REGISTERED.name:
-                # Sending the search message to all clients except the buyer
                 s.sendto(
                     search_msg.encode("utf-8"),
                     (users[user]["ip"], int(users[user]["udp"])),
                 )
-            else:
-                pass
     finally:
         lock.release()
 
-    # TODO: add the reply_msg to the client here.
+    # Start wait_and_compare in a new thread
+    threading.Thread(target=wait_offer_handler, args=(item_id,)).start()
 
 
-# Listening for client requests indefinitely
+# Handles the make_offer request
+def handle_make_offer(data, addr):
+    request_type, request_number, name, item_id, price = data.split(", ")
+
+    lock.acquire()
+
+    try:
+        try:
+            with open("Offers.json", "r") as json_file:
+                offers = json.load(json_file)
+        except FileNotFoundError:
+            offers = {}
+
+        if item_id in offers:
+            offers[item_id].append({
+                "request_number": request_number,
+                "price": price,
+                "seller": name,
+            })
+        else:
+            offers[item_id] = [{
+                "request_number": request_number,
+                "price": price,
+                "seller": name,
+            }]
+
+        with open("Offers.json", "w") as json_file:
+            json.dump(offers, json_file, indent=4)
+    finally:
+        lock.release()
+
+    print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
+
+
+
+#Handles Negotiation Response
+def handle_accept(data, addr):
+    request_type, request_number, item_id, item_name, item_price = data.split(", ")
+
+    item_details = fetch_item_data(item_id)
+    buyer_info = fetch_user_data(item_details["buyer"])
+    seller_info = fetch_user_data(item_details["seller"])
+
+    # Sending the FOUND message to the buyer
+    found_msg = f"FOUND, {request_number}, {item_id}, {item_name}, {item_details['max_price']}"
+    s.sendto(found_msg.encode("utf-8"), (buyer_info["ip"], int(buyer_info["udp"])))
+
+    Reserve_msg = f"RESERVE, {item_details['request_number']}, {item_id}, {item_details['item_name']}, {item_details['price']}"
+    s.sendto(Reserve_msg.encode("utf-8"), (seller_info["ip"], int(seller_info["udp"])))
+
+
+    print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
+
+
+def handle_rejection(data, addr):
+    request_type, request_number, item_id, item_name, item_price = data.split(", ")
+
+    item_details = fetch_item_data(item_id)
+    buyer_info = fetch_user_data(item_details["buyer"])
+
+    Refuse_msg = f"NOT-FOUND, {request_number}, {item_id}, {item_name}, {item_details['max_price']}"
+    s.sendto(Refuse_msg.encode("utf-8"), (buyer_info["ip"], int(buyer_info["udp"])))
+
+    print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
+
+
+def handle_buy(data, addr):
+    request_type, request_number, item_id, item_name, item_price = data.split(", ")
+
+
+    item_details = fetch_item_data(item_id)
+    buyer_info = fetch_user_data(item_details["buyer"])
+    seller_info = fetch_user_data(item_details["seller"])
+
+    print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
+
+    ##open tcp connection between buyer and seller
+
+
+
+def handle_cancel(data, addr):
+    request_type, request_number, item_id, item_name, item_price = data.split(", ")
+
+    item_details = fetch_item_data(item_id)
+    seller_info = fetch_user_data(item_details["seller"])
+
+    Refuse_msg = f"CANCEL, {request_number}, {item_id}, {item_name}, {item_details['max_price']}"
+    s.sendto(Refuse_msg.encode("utf-8"), (seller_info["ip"], int(seller_info["udp"])))
+
+
+    print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
+
+# Waits for offers and compares them after the waiting period
+def wait_offer_handler(item_id):
+    # Wait for 5 minutes (300 seconds)
+    time.sleep(15)
+
+    best_offer = compare_prices(item_id)
+
+    item = fetch_item_data(item_id)
+    buyer = fetch_user_data(item["buyer"])
+
+    if best_offer:
+        print(f"Best Offer for item {item_id}: {best_offer}")
+
+        seller = fetch_user_data(best_offer["seller"])
+
+        if float(best_offer["price"]) <= float(item["max_price"]):
+
+            # Notify buyer and seller
+
+            # send the reserve message to the seller
+            Reserve_msg = f"RESERVE, {item['request_number']}, {item_id}, {item['item_name']}, {best_offer['price']}"
+            s.sendto(Reserve_msg.encode("utf-8"), (seller["ip"], int(seller["udp"])))
+
+            # send found msg to buyer
+            found_msg = f"FOUND, {item['request_number']}, {item_id}, {item['item_name']}, {best_offer['price']}"
+            s.sendto(found_msg.encode("utf-8"), (buyer["ip"], int(buyer["udp"])))
+
+            willing_to_negotiate_details = f"You can now Buy or Cancel the deal for this item: {item['item_name']}, {item_id}, at the price of {best_offer['price']}."
+            s.sendto(willing_to_negotiate_details.encode("utf-8"), (buyer["ip"], int(buyer["udp"])))
+
+        elif float(best_offer["price"]) > float(item["max_price"]):
+            # negotiate with the seller
+            negotiation_msg = f"NEGOTIATE, {item['request_number']}, {item_id}, {item['item_name']}, {item['max_price']}"
+            s.sendto(negotiation_msg.encode("utf-8"), (seller["ip"], int(seller["udp"])))
+
+            # another msg for the seller if they want to negotiate, given the details.
+            willing_to_negotiate_details = f"For this item: {item['item_name']}, {item_id}, the buyer is willing to pay  {item['max_price']}. Are you willing to sell it at their price?"
+            s.sendto(willing_to_negotiate_details.encode("utf-8"), (seller["ip"], int(seller["udp"])))
+
+    else:
+        not_available_msg = f"NOT-AVAILABLE, {item['request_number']}, {item_id}, {item['item_name']}, {item['max_price']}"
+        s.sendto(not_available_msg.encode("utf-8"), (buyer["ip"], int(buyer["udp"])))
+
+
+# Compares offers to find the lowest price
+def compare_prices(item_id):
+    lock.acquire()
+    try:
+        # Read the offers from 'Offers.json'
+        try:
+            with open("Offers.json", "r") as json_file:
+                offers = json.load(json_file)
+        except FileNotFoundError:
+            offers = {}
+
+        if item_id in offers:
+            offers_list = offers[item_id]
+            # Find the best offer based on the lowest price
+            best_offer = min(offers_list, key=lambda x: float(x["price"]))
+
+            # Update the offers to keep only the best offer
+            offers[item_id] = [best_offer]
+
+            # Write the updated offers back to the JSON file
+            with open("Offers.json", "w") as json_file:
+                json.dump(offers, json_file, indent=4)
+
+            return best_offer
+        else:
+            return None
+    finally:
+        lock.release()
+
+
+def fetch_item_data(item_id):
+    lock.acquire()
+    try:
+        with open("Wanted_Items.json", "r") as json_file:
+            wanted_items = json.load(json_file)
+    finally:
+        lock.release()
+
+    return wanted_items[item_id]
+
+
+def fetch_user_data(user_name):
+    lock.acquire()
+    try:
+        try:
+            with open("users.json", "r") as json_file:
+                users = json.load(json_file)
+        except FileNotFoundError:
+            users = {}
+    finally:
+        lock.release()
+
+    return users[user_name]
+
+
+# Main server loop
 while True:
     try:
+        d = s.recvfrom(1024)
+        data = d[0].decode("utf-8")
+        addr = d[1]
 
-        d = s.recvfrom(
-            1024
-        )  # receiving the data from the client with a buffer size of 1024 bytes
-        data = d[0].decode(
-            "utf-8"
-        )  # storing the data after decoding it into string type
-        addr = d[1]  # storing the socket parameters of the client (IP + PORT)
-
-        # break the loop if there is no data sent from the client
         if not data:
             break
-        # Multi-threading
-        # Once the listener detects a client request, it creates a new thread and passes the handle_request method as target to handle the request
         else:
-            user_request = data.split(",")[
-                0
-            ]  # splitting the request message sent by the client to only have the type of request (e.i. REGISTER, DE-REGISTER, etc...
+            user_request = data.split(",")[0]
             client_thread = threading.Thread(
                 target=handle_request, args=(user_request, data, addr)
-            )  # Creating a new thread to handle the coming client request
-            client_thread.start()  # starting the thread
-            client_thread.join()  # waiting for the thread to be complete before the next one can resume
-
+            )
+            client_thread.start()
+            # Removed client_thread.join() to prevent blocking
     except socket.timeout:
-        pass  # Continues to the next iteration without performing any error handling action
+        pass
+    except KeyboardInterrupt:
+        print("Server is shutting down.")
+        break
     except Exception as e:
         print(f"An error occurred: {e}")
-# closing the UDP socket
+
+# Closing the UDP socket
 s.close()
