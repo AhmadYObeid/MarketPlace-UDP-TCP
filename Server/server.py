@@ -21,26 +21,27 @@ class UserStatus(Enum):
 
 # Creating the UDP socket
 try:
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     print("Socket Created!\n")
 except OSError as e:
     print(
-        f"Failed to create the socket.\nError Code: {e.errno}\nMessage: {e.strerror}\n"
+        f"Failed to create the udp socket.\nError Code: {e.errno}\nMessage: {e.strerror}\n"
     )
     sys.exit()
 
 
 # Binding the socket to the host and port number
 try:
-    s.bind((HOST, PORT))
+    udp_socket.bind((HOST, PORT))
 except OSError as e:
     print(f"Binding failed!\nError Code: {e.errno}\nMessage: {e.strerror}\n")
     sys.exit()
 
 print("Socket was successfully bound!\n")
 
+
 # Setting a timeout for the socket
-s.settimeout(5)
+udp_socket.settimeout(5)
 
 # Creating a mutex lock to avoid race conditions
 lock = threading.Lock()
@@ -60,6 +61,10 @@ def handle_request(user_request, data, addr):
         handle_accept(data, addr)
     elif user_request == "REFUSE":
         handle_rejection(data, addr)
+    elif user_request == "BUY":
+        handle_buy(data, addr)
+    elif user_request == "CANCEL":
+        handle_cancel(data, addr)
     else:
         print("Invalid Request!")
 
@@ -99,7 +104,7 @@ def handle_registration(data, addr):
     finally:
         lock.release()
 
-    s.sendto(reply_msg.encode("utf-8"), addr)
+    udp_socket.sendto(reply_msg.encode("utf-8"), addr)
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
 
@@ -129,7 +134,7 @@ def handle_deregistration(data, addr):
     finally:
         lock.release()
 
-    s.sendto(reply_msg.encode("utf-8"), addr)
+    udp_socket.sendto(reply_msg.encode("utf-8"), addr)
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
 
@@ -183,7 +188,7 @@ def handle_looking_for(data, addr):
             users = {}
         for user in users:
             if user != name and users[user]["status"] == UserStatus.REGISTERED.name:
-                s.sendto(
+                udp_socket.sendto(
                     search_msg.encode("utf-8"),
                     (users[user]["ip"], int(users[user]["udp"])),
                 )
@@ -235,14 +240,10 @@ def handle_accept(data, addr):
 
     item_details = fetch_item_data(item_id)
     buyer_info = fetch_user_data(item_details["buyer"])
-    seller_info = fetch_user_data(item_details["seller"])
 
     # Sending the FOUND message to the buyer
     found_msg = f"FOUND, {request_number}, {item_id}, {item_name}, {item_details['max_price']}"
-    s.sendto(found_msg.encode("utf-8"), (buyer_info["ip"], int(buyer_info["udp"])))
-
-    Reserve_msg = f"RESERVE, {item_details['request_number']}, {item_id}, {item_details['item_name']}, {item_details['price']}"
-    s.sendto(Reserve_msg.encode("utf-8"), (seller_info["ip"], int(seller_info["udp"])))
+    udp_socket.sendto(found_msg.encode("utf-8"), (buyer_info["ip"], int(buyer_info["udp"])))
 
 
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
@@ -254,8 +255,34 @@ def handle_rejection(data, addr):
     item_details = fetch_item_data(item_id)
     buyer_info = fetch_user_data(item_details["buyer"])
 
-    Refuse_msg = f"NOT-FOUND, {request_number}, {item_id}, {item_name}, {item_details['max_price']}"
-    s.sendto(Refuse_msg.encode("utf-8"), (buyer_info["ip"], int(buyer_info["udp"])))
+    not_found_msg = f"NOT-FOUND, {request_number}, {item_id}, {item_name}, {item_details['max_price']}"
+    udp_socket.sendto(not_found_msg.encode("utf-8"), (buyer_info["ip"], int(buyer_info["udp"])))
+
+    lock.acquire()
+    try:
+        try:
+            with open("Wanted_Items.json", "r") as json_file:
+                wanted_items = json.load(json_file)
+        except FileNotFoundError:
+            wanted_items = {}
+
+        try:
+            with open("Offers.json", "r") as json_file:
+                offers = json.load(json_file)
+        except FileNotFoundError:
+            offers = {}
+
+        del offers[item_id]
+        del wanted_items[item_id]
+
+        with open("Wanted_Items.json", "w") as json_file:
+            json.dump(wanted_items, json_file, indent=4)
+
+        with open("Offers.json", "w") as json_file:
+            json.dump(offers, json_file, indent=4)
+
+    finally:
+        lock.release()
 
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
@@ -266,25 +293,118 @@ def handle_buy(data, addr):
 
     item_details = fetch_item_data(item_id)
     buyer_info = fetch_user_data(item_details["buyer"])
-    seller_info = fetch_user_data(item_details["seller"])
+
+    offer_details = fetch_offer_data(item_id)
+    seller_info = fetch_user_data(offer_details["seller"])
+
 
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
     ##open tcp connection between buyer and seller
 
+    threading.Thread(target=tcp_connection, args=(seller_info,buyer_info,item_details,offer_details)).start()
+
+def tcp_connection(seller_info,buyer_info,item_details,offer_details):
+    RQ_server = random.randint(1, 500)
+
+    tcp_msg = f"START_TCP, {RQ_server}"
+
+    udp_socket.sendto(tcp_msg.encode("utf-8"), (buyer_info["ip"], int(buyer_info["udp"])))
+    udp_socket.sendto(tcp_msg.encode("utf-8"), (seller_info["ip"], int(seller_info["udp"])))
+
+    TCP_PORT = 6000
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as tcp_socket:
+        tcp_socket.bind((HOST, TCP_PORT))  # Bind the server to the address and port
+        tcp_socket.listen(5)  # Listen for incoming connections
+        print(f"Server listening on {HOST}:{TCP_PORT}")
+
+        # Accept a connection from the client
+        conn, addr = tcp_socket.accept()
+        conn2, addr2 = tcp_socket.accept()
+
+
+        #max_price = item_details["max_price"]
+        #offer_price = offer_details["price"]
+
+        #if max_price <= offer_price:
+        #    final_price = max_price
+        #else:
+        #    final_price = offer_price
+
+        #print(final_price)
+        # print("debug 1 server")
+        #
+        #
+        #inform_req_mes = f"INFORM_Req, {RQ_server}, !" #{item_details["item_name"]}, {final_price}
+        # print("debug 2 server")
+
+        with conn:
+            print(f"Connected by {addr}")
+            # Receive data from the client
+            data1 = conn.recv(1024)
+            print(f"Received: {data1.decode()}")
+            # Send a response back to the client
+            conn.sendall(b"Hello, Client!")
+            print("debug 3 server")
+
+        with conn2:
+            print(f"Connected by {addr2}")
+            # Receive data from the client
+            data2 = conn2.recv(1024)
+            print(f"Received: {data2.decode()}")
+            # Send a response back to the client
+            #conn2.sendall(inform_req_mes.encode("utf-8"))
+            #conn2.sendall(b"Hello, Client!")
+            print("debug 4 server")
+
+
+        # conn.settimeout(30)
+        # conn2.settimeout(30)
+
+
 
 
 def handle_cancel(data, addr):
     request_type, request_number, item_id, item_name, item_price = data.split(", ")
-
     item_details = fetch_item_data(item_id)
-    seller_info = fetch_user_data(item_details["seller"])
 
-    Refuse_msg = f"CANCEL, {request_number}, {item_id}, {item_name}, {item_details['max_price']}"
-    s.sendto(Refuse_msg.encode("utf-8"), (seller_info["ip"], int(seller_info["udp"])))
+    offer_details = fetch_offer_data(item_id)
 
+    seller_info = fetch_user_data(offer_details["seller"])
+
+    cancel_msg = f"CANCEL, {request_number}, {item_id}, {item_name}, {item_details['max_price']}"
+    udp_socket.sendto(cancel_msg.encode("utf-8"), (seller_info["ip"], int(seller_info["udp"])))
+
+    lock.acquire()
+    try:
+        try:
+            with open("Wanted_Items.json", "r") as json_file:
+                wanted_items = json.load(json_file)
+        except FileNotFoundError:
+            wanted_items = {}
+
+        try:
+            with open("Offers.json", "r") as json_file:
+                offers = json.load(json_file)
+        except FileNotFoundError:
+            offers = {}
+
+        del offers[item_id]
+        del wanted_items[item_id]
+
+        with open("Wanted_Items.json", "w") as json_file:
+            json.dump(wanted_items, json_file, indent=4)
+
+        with open("Offers.json", "w") as json_file:
+            json.dump(offers, json_file, indent=4)
+
+    finally:
+        lock.release()
 
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
+
+
 
 # Waits for offers and compares them after the waiting period
 def wait_offer_handler(item_id):
@@ -307,27 +427,43 @@ def wait_offer_handler(item_id):
 
             # send the reserve message to the seller
             Reserve_msg = f"RESERVE, {item['request_number']}, {item_id}, {item['item_name']}, {best_offer['price']}"
-            s.sendto(Reserve_msg.encode("utf-8"), (seller["ip"], int(seller["udp"])))
+            udp_socket.sendto(Reserve_msg.encode("utf-8"), (seller["ip"], int(seller["udp"])))
 
             # send found msg to buyer
             found_msg = f"FOUND, {item['request_number']}, {item_id}, {item['item_name']}, {best_offer['price']}"
-            s.sendto(found_msg.encode("utf-8"), (buyer["ip"], int(buyer["udp"])))
+            udp_socket.sendto(found_msg.encode("utf-8"), (buyer["ip"], int(buyer["udp"])))
 
             willing_to_negotiate_details = f"You can now Buy or Cancel the deal for this item: {item['item_name']}, {item_id}, at the price of {best_offer['price']}."
-            s.sendto(willing_to_negotiate_details.encode("utf-8"), (buyer["ip"], int(buyer["udp"])))
+            udp_socket.sendto(willing_to_negotiate_details.encode("utf-8"), (buyer["ip"], int(buyer["udp"])))
 
         elif float(best_offer["price"]) > float(item["max_price"]):
             # negotiate with the seller
             negotiation_msg = f"NEGOTIATE, {item['request_number']}, {item_id}, {item['item_name']}, {item['max_price']}"
-            s.sendto(negotiation_msg.encode("utf-8"), (seller["ip"], int(seller["udp"])))
+            udp_socket.sendto(negotiation_msg.encode("utf-8"), (seller["ip"], int(seller["udp"])))
 
             # another msg for the seller if they want to negotiate, given the details.
             willing_to_negotiate_details = f"For this item: {item['item_name']}, {item_id}, the buyer is willing to pay  {item['max_price']}. Are you willing to sell it at their price?"
-            s.sendto(willing_to_negotiate_details.encode("utf-8"), (seller["ip"], int(seller["udp"])))
+            udp_socket.sendto(willing_to_negotiate_details.encode("utf-8"), (seller["ip"], int(seller["udp"])))
 
     else:
         not_available_msg = f"NOT-AVAILABLE, {item['request_number']}, {item_id}, {item['item_name']}, {item['max_price']}"
-        s.sendto(not_available_msg.encode("utf-8"), (buyer["ip"], int(buyer["udp"])))
+        udp_socket.sendto(not_available_msg.encode("utf-8"), (buyer["ip"], int(buyer["udp"])))
+
+        lock.acquire()
+        try:
+            try:
+                with open("Wanted_Items.json", "r") as json_file:
+                    wanted_items = json.load(json_file)
+            except FileNotFoundError:
+                wanted_items = {}
+
+            del wanted_items[item_id]
+
+            with open("Wanted_Items.json", "w") as json_file:
+                json.dump(wanted_items, json_file, indent=4)
+        finally:
+            lock.release()
+
 
 
 # Compares offers to find the lowest price
@@ -371,6 +507,17 @@ def fetch_item_data(item_id):
     return wanted_items[item_id]
 
 
+def fetch_offer_data(item_id):
+    lock.acquire()
+    try:
+        with open("Offers.json", "r") as json_file:
+            offers = json.load(json_file)
+    finally:
+        lock.release()
+
+    return offers[item_id][0]
+
+
 def fetch_user_data(user_name):
     lock.acquire()
     try:
@@ -385,10 +532,11 @@ def fetch_user_data(user_name):
     return users[user_name]
 
 
+
 # Main server loop
 while True:
     try:
-        d = s.recvfrom(1024)
+        d = udp_socket.recvfrom(1024)
         data = d[0].decode("utf-8")
         addr = d[1]
 
@@ -410,4 +558,4 @@ while True:
         print(f"An error occurred: {e}")
 
 # Closing the UDP socket
-s.close()
+udp_socket.close()

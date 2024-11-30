@@ -1,0 +1,14 @@
+{
+    "Dara": {
+        "ip": "192.168.94.19",
+        "udp": "4444",
+        "tcp": "6000",
+        "status": "REGISTERED"
+    },
+    "Omar": {
+        "ip": "192.168.94.36",
+        "udp": "4444",
+        "tcp": "6000",
+        "status": "REGISTERED"
+    }
+}
