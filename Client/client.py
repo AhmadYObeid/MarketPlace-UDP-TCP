@@ -91,8 +91,6 @@ def user_request(user_input):
             print(f"Invalid option! Please try again.")
 
 
-# Swtich statement to handle different user requests
-
 
 # Prepares the registration request message to be sent to the server
 def user_registration(request_number):
@@ -197,14 +195,25 @@ def buy_cancel():
         return None
 
 
-
 def tcp_connection(request_number):
-
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as TCP_socket:
         TCP_socket.connect((server_host, client_TCP_port))  # Connect to the server
         print(f"Connected to {server_host}:{client_TCP_port}")
 
+        global user_name
+
         TCP_socket.sendall(b"Hello, Server!")  # Send a message to the server
+
+        data = TCP_socket.recv(1024)
+        print(f"Received: {data.decode()}")
+
+        CC = input(f"Now enter these details for the transaction: CC: ")
+        CC_Exp_Date = input(f"CC Expiration Date: ")
+        Address = input(f"Address: ")
+
+        inform_respond_mes = f"INFORM_Req, {request_number}, {user_name}, {CC}, {CC_Exp_Date}, {Address}!"
+
+        TCP_socket.sendall(inform_respond_mes.encode("utf-8"))
 
         # Receive a response from the server
         data = TCP_socket.recv(1024)
@@ -238,7 +247,6 @@ def recieve_logic(reply):
 
 
 # start of the logic of constantly listening for messages from the server
-
 def receive_messages():
     while True:
         try:

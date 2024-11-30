@@ -314,6 +314,7 @@ def tcp_connection(seller_info,buyer_info,item_details,offer_details):
 
     TCP_PORT = 6000
 
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as tcp_socket:
         tcp_socket.bind((HOST, TCP_PORT))  # Bind the server to the address and port
         tcp_socket.listen(5)  # Listen for incoming connections
@@ -324,20 +325,19 @@ def tcp_connection(seller_info,buyer_info,item_details,offer_details):
         conn2, addr2 = tcp_socket.accept()
 
 
-        #max_price = item_details["max_price"]
-        #offer_price = offer_details["price"]
+        max_price = item_details["max_price"]
+        offer_price = offer_details["price"]
+        item_name_print = item_details["item_name"]
 
-        #if max_price <= offer_price:
-        #    final_price = max_price
-        #else:
-        #    final_price = offer_price
+        if max_price >= offer_price:
+            final_price = offer_price
+        else:
+            final_price = max_price
 
-        #print(final_price)
-        # print("debug 1 server")
-        #
-        #
-        #inform_req_mes = f"INFORM_Req, {RQ_server}, !" #{item_details["item_name"]}, {final_price}
-        # print("debug 2 server")
+
+        inform_req_mes_1 = f"INFORM_Req, {RQ_server}, {item_name_print}, {final_price}!"
+        inform_req_mes_2 = f"INFORM_Req, {RQ_server}, {item_name_print}, {final_price}!"
+
 
         with conn:
             print(f"Connected by {addr}")
@@ -345,8 +345,7 @@ def tcp_connection(seller_info,buyer_info,item_details,offer_details):
             data1 = conn.recv(1024)
             print(f"Received: {data1.decode()}")
             # Send a response back to the client
-            conn.sendall(b"Hello, Client!")
-            print("debug 3 server")
+            conn.sendall(inform_req_mes_1.encode("utf-8"))
 
         with conn2:
             print(f"Connected by {addr2}")
@@ -354,13 +353,8 @@ def tcp_connection(seller_info,buyer_info,item_details,offer_details):
             data2 = conn2.recv(1024)
             print(f"Received: {data2.decode()}")
             # Send a response back to the client
-            #conn2.sendall(inform_req_mes.encode("utf-8"))
-            #conn2.sendall(b"Hello, Client!")
-            print("debug 4 server")
+            conn2.sendall(inform_req_mes_2.encode("utf-8"))
 
-
-        # conn.settimeout(30)
-        # conn2.settimeout(30)
 
 
 
