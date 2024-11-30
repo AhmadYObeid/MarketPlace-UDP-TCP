@@ -12,7 +12,10 @@ import time  # library used to simulate simutanous client reqeuest sent to
 # defining the socket parameters (IP + PORT)
 client_host = "0.0.0.0"  # listening on all available netwrok interfaces
 client_port = 4444  # arbitrary port number for the client socket
-client_TCP_port = 5555  # arbitrary number for now
+client_TCP_port = 6000  # arbitrary number for now
+server_TCP_port = 6000 #arbitrary number
+
+
 
 try:
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -82,8 +85,8 @@ def user_request(user_input):
             return make_offer(request_number)
         case 5:
             return accept_refuse()
-        # case 6:
-        #     return make_offer(request_number)
+        case 6:
+            return buy_cancel()
         case _:
             print(f"Invalid option! Please try again.")
 
@@ -194,6 +197,21 @@ def buy_cancel():
         return None
 
 
+
+def tcp_connection(request_number):
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as TCP_socket:
+        TCP_socket.connect((server_host, client_TCP_port))  # Connect to the server
+        print(f"Connected to {server_host}:{client_TCP_port}")
+
+        TCP_socket.sendall(b"Hello, Server!")  # Send a message to the server
+
+        # Receive a response from the server
+        data = TCP_socket.recv(1024)
+        print(f"Received: {data.decode()}")
+
+
+
 # checks the reply message from the server to determine if the user is registered or not
 # (we can add more logic here for other cases)
 def recieve_logic(reply):
@@ -213,6 +231,12 @@ def recieve_logic(reply):
         request_type, request_number, item_id, item_name, price = feedback.split(", ")
         found_items_info[item_id] = (request_number, item_name, price)
 
+    if re.search(rf'\b{"START_TCP"}\b', feedback):
+        request_type, request_number = feedback.split(", ")
+        tcp_connection(request_number)
+
+
+
 # start of the logic of constantly listening for messages from the server
 
 def receive_messages():
@@ -224,7 +248,7 @@ def receive_messages():
             print(f"\nServer reply [{addr[0]}, {addr[1]}]: {reply}\n")
             recieve_logic(reply)
         except socket.error as msg:
-            print("Error Occurred!")
+            print("Error Occurred! 2.")
 
 
 # creates a thread to constantly listen for messages from the server
@@ -257,6 +281,6 @@ while True:
             request_number += 1
             update_request_number(request_number)
         except socket.error as msg:
-            print("Error Occurred!")
+            print("Error Occurred! 1.")
     else:
         print("User not registered! Please register first. (OR A msg doesnt exist to be sent.)")
