@@ -1,0 +1,26 @@
+{
+    "Dara": {
+        "ip": "192.168.94.19",
+        "udp": "4444",
+        "tcp": "6000",
+        "status": "REGISTERED"
+    },
+    "test1": {
+        "ip": "192.168.56.1",
+        "udp": "4444",
+        "tcp": "6000",
+        "status": "REGISTERED"
+    },
+    "test2": {
+        "ip": "192.168.56.1",
+        "udp": "4444",
+        "tcp": "6000",
+        "status": "REGISTERED"
+    },
+    "test3": {
+        "ip": "192.168.56.1",
+        "udp": "4444",
+        "tcp": "6000",
+        "status": "REGISTERED"
+    }
+}

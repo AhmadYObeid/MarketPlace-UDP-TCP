@@ -74,24 +74,20 @@ def update_request_number(request_number):
 
 
 def user_request(user_input):
-    match user_input:
-        case 1:
-            return user_registration(request_number)
-        case 2:
-            return user_deregistration(request_number)
-        case 3:
-            return looking_for(request_number)
-        case 4:
-            return make_offer(request_number)
-        case 5:
-            return accept_refuse()
-        case 6:
-            return buy_cancel()
-        case _:
-            print(f"Invalid option! Please try again.")
-
-
-# Swtich statement to handle different user requests
+    if user_input == 1:
+        return user_registration(request_number)
+    elif user_input == 2:
+        return user_deregistration(request_number)
+    elif user_input == 3:
+        return looking_for(request_number)
+    elif user_input == 4:
+        return make_offer(request_number)
+    elif user_input == 5:
+        return accept_refuse()
+    elif user_input == 6:
+        return buy_cancel()
+    else:
+        print(f"Invalid option! Please try again.")
 
 
 # Prepares the registration request message to be sent to the server
@@ -197,14 +193,25 @@ def buy_cancel():
         return None
 
 
-
 def tcp_connection(request_number):
-
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as TCP_socket:
         TCP_socket.connect((server_host, client_TCP_port))  # Connect to the server
         print(f"Connected to {server_host}:{client_TCP_port}")
 
+        global user_name
+
         TCP_socket.sendall(b"Hello, Server!")  # Send a message to the server
+
+        data = TCP_socket.recv(1024)
+        print(f"Received: {data.decode()}")
+
+        CC = input(f"Now enter these details for the transaction: CC: ")
+        CC_Exp_Date = input(f"CC Expiration Date: ")
+        Address = input(f"Address: ")
+
+        inform_respond_mes = f"INFORM_Req, {request_number}, {user_name}, {CC}, {CC_Exp_Date}, {Address}!"
+
+        TCP_socket.sendall(inform_respond_mes.encode("utf-8"))
 
         # Receive a response from the server
         data = TCP_socket.recv(1024)
@@ -238,7 +245,6 @@ def recieve_logic(reply):
 
 
 # start of the logic of constantly listening for messages from the server
-
 def receive_messages():
     while True:
         try:

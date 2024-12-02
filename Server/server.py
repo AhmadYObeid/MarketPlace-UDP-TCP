@@ -302,67 +302,6 @@ def handle_buy(data, addr):
 
     ##open tcp connection between buyer and seller
 
-    threading.Thread(target=tcp_connection, args=(seller_info,buyer_info,item_details,offer_details)).start()
-
-def tcp_connection(seller_info,buyer_info,item_details,offer_details):
-    RQ_server = random.randint(1, 500)
-
-    tcp_msg = f"START_TCP, {RQ_server}"
-
-    udp_socket.sendto(tcp_msg.encode("utf-8"), (buyer_info["ip"], int(buyer_info["udp"])))
-    udp_socket.sendto(tcp_msg.encode("utf-8"), (seller_info["ip"], int(seller_info["udp"])))
-
-    TCP_PORT = 6000
-
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as tcp_socket:
-        tcp_socket.bind((HOST, TCP_PORT))  # Bind the server to the address and port
-        tcp_socket.listen(5)  # Listen for incoming connections
-        print(f"Server listening on {HOST}:{TCP_PORT}")
-
-        # Accept a connection from the client
-        conn, addr = tcp_socket.accept()
-        conn2, addr2 = tcp_socket.accept()
-
-
-        #max_price = item_details["max_price"]
-        #offer_price = offer_details["price"]
-
-        #if max_price <= offer_price:
-        #    final_price = max_price
-        #else:
-        #    final_price = offer_price
-
-        #print(final_price)
-        # print("debug 1 server")
-        #
-        #
-        #inform_req_mes = f"INFORM_Req, {RQ_server}, !" #{item_details["item_name"]}, {final_price}
-        # print("debug 2 server")
-
-        with conn:
-            print(f"Connected by {addr}")
-            # Receive data from the client
-            data1 = conn.recv(1024)
-            print(f"Received: {data1.decode()}")
-            # Send a response back to the client
-            conn.sendall(b"Hello, Client!")
-            print("debug 3 server")
-
-        with conn2:
-            print(f"Connected by {addr2}")
-            # Receive data from the client
-            data2 = conn2.recv(1024)
-            print(f"Received: {data2.decode()}")
-            # Send a response back to the client
-            conn2.sendall(b"Hello, Client!")
-            #conn2.sendall(b"Hello, Client!")
-            print("debug 4 server")
-
-
-        # conn.settimeout(30)
-        # conn2.settimeout(30)
-
-
 
 
 def handle_cancel(data, addr):
@@ -517,6 +456,17 @@ def fetch_offer_data(item_id):
 
     return offers[item_id][0]
 
+
+def fetch_offer_data(item_id):
+    lock.acquire()
+    try:
+        with open("Offers.json", "r") as json_file:
+            offers = json.load(json_file)
+    finally:
+        lock.release()
+
+    return offers[item_id][0]
+
 def fetch_user_data(user_name):
     lock.acquire()
     try:
@@ -529,8 +479,6 @@ def fetch_user_data(user_name):
         lock.release()
 
     return users[user_name]
-
-
 
 
 # Main server loop
