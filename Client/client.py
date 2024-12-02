@@ -1,31 +1,28 @@
+#Importing necessary libraries
 import json
-import random
 import re
 import socket
 import sys
 import threading
-import time  # library used to simulate simutanous client reqeuest sent to
-
-# the server for multi-threading test purposes.
-# It can also be used to set timers for client offers.
 
 # defining the socket parameters (IP + PORT)
 client_host = "0.0.0.0"  # listening on all available netwrok interfaces
 client_port = 4444  # arbitrary port number for the client socket
-client_TCP_port = 6000  # arbitrary number for now
+client_TCP_port = 6000  # arbitrary number
 server_TCP_port = 6000 #arbitrary number
 
-
-
+#Creating the udp socket 
 try:
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 except socket.error:
     print(f"Socket creation failed!")
     sys.exit()
 
-s.bind((client_host, client_port))
+#Binding the upd socket to the client's host and port number
+udp_socket.bind((client_host, client_port))
 
-
+#Loads the current value of the request number.
+#If not existent, it resets and starts from '1'
 def get_request_number():
     try:
         with open("rq_number.json", "r") as json_file:
@@ -36,16 +33,17 @@ def get_request_number():
             json.dump({"request_number": saved_request_number}, json_file)
     return saved_request_number
 
-
+#Fetching the request number
 request_number = get_request_number()
 
-
+#Returns the server's IP address stored in a local json file
+#The value needs to be manually modified if the testing environment changes
 def get_server_ip():
     try:
         with open("Server_IP.json", "r") as json_file:
             IP_json = json.load(
                 json_file
-            )  # loading the json file users' info into the dictionary of users
+            ) 
 
     except FileNotFoundError:
         IP_json = (
@@ -54,25 +52,27 @@ def get_server_ip():
 
     return IP_json["Server"]["ip"]
 
-
-server_host = get_server_ip()
-
 # Socket parameters of the server socket
-server_port = 5000
-is_registered = False
+server_host = get_server_ip() #Fetching the server's ip
+server_port = 5000 #Arbitrary number for server's port
 
 # Variable to track the registration status of the client
 # Used to allow the users to use some functions only if they are registered
+is_registered = False
+
+#Variable to store the name of the user
 user_name = None
+
+# Negotiation and Found dictionaries to store the incoming found and negotiation items
 negotiation_items_info = {}
 found_items_info = {}
 
-
+#Updates the rq number and stores it in the json file after each request sent to the server
 def update_request_number(request_number):
     with open("rq_number.json", "w") as json_file:
         json.dump({"request_number": request_number}, json_file)
 
-
+#Switch statement to handle different client requests
 def user_request(user_input):
     if user_input == 1:
         return user_registration(request_number)
@@ -90,7 +90,7 @@ def user_request(user_input):
         print(f"Invalid option! Please try again.")
 
 
-# Prepares the registration request message to be sent to the server
+# Returns the registration request message to be sent to the server
 def user_registration(request_number):
     print(
         f"Enter the following information to register yourself within the shopping system:\n"
@@ -99,13 +99,13 @@ def user_registration(request_number):
     ip = socket.gethostbyname(socket.gethostname())
     udp = client_port
     tcp = client_TCP_port
-    msg = f"REGISTER, {str(request_number)}, {name}, {ip}, {udp}, {tcp}"  # TODO: only a temporary solution for now, eventually we should wait for the server's response to set this value to true.
+    msg = f"REGISTER, {str(request_number)}, {name}, {ip}, {udp}, {tcp}" 
     global user_name
     user_name = name
     return msg
 
 
-# Prepares the de-registration request message to be sent to the server
+# Returns the de-registration request message to be sent to the server
 def user_deregistration(request_number):
     name = input(f"Enter the name of the user to be de-registered: ")
     ip = socket.gethostbyname(socket.gethostname())
@@ -117,10 +117,7 @@ def user_deregistration(request_number):
     return msg
 
 
-print(f"Welcome to the Peer-to-Peer Shopping System!\n")
-
-
-# Sends a looking_for request to the server to indicate a search for an item
+# Returns the looking_for request message to be sent to the server
 def looking_for(reqeuest_number):
     if is_registered == True:
         global user_name
@@ -134,7 +131,7 @@ def looking_for(reqeuest_number):
     else:
         return None
 
-
+#Returns the offer request message to be sent to the server
 def make_offer(request_number):
     if is_registered == True:
         global user_name
@@ -147,7 +144,7 @@ def make_offer(request_number):
     else:
         return None
 
-
+#Returns the accept/refuse message to be sent to the server
 def accept_refuse():
     if is_registered == True:
         print("What item are you accepting/refusing the negotiation for:")
@@ -172,6 +169,7 @@ def accept_refuse():
         return None
 
 
+#Returns the buy/cancel message to be sent to the server
 def buy_cancel():
     if is_registered == True:
         print("What item are you buying/cancelling the deal for:")
@@ -192,17 +190,17 @@ def buy_cancel():
     else:
         return None
 
-
+#Handles the tcp connection with the server during the buying phase
 def tcp_connection(request_number):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as TCP_socket:
-        TCP_socket.connect((server_host, client_TCP_port))  # Connect to the server
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as tcp_socket:
+        tcp_socket.connect((server_host, client_TCP_port))  # Connect to the server
         print(f"Connected to {server_host}:{client_TCP_port}")
 
         global user_name
 
-        TCP_socket.sendall(b"Hello, Server!")  # Send a message to the server
+        tcp_socket.sendall(b"Hello, Server!")  # Send a message to the server
 
-        data = TCP_socket.recv(1024)
+        data = tcp_socket.recv(1024)
         print(f"Received: {data.decode()}")
 
         CC = input(f"Now enter these details for the transaction: CC: ")
@@ -211,44 +209,47 @@ def tcp_connection(request_number):
 
         inform_respond_mes = f"INFORM_Req, {request_number}, {user_name}, {CC}, {CC_Exp_Date}, {Address}!"
 
-        TCP_socket.sendall(inform_respond_mes.encode("utf-8"))
+        tcp_socket.sendall(inform_respond_mes.encode("utf-8"))
 
         # Receive a response from the server
-        data = TCP_socket.recv(1024)
+        data = tcp_socket.recv(1024)
         print(f"Received: {data.decode()}")
 
 
 
-# checks the reply message from the server to determine if the user is registered or not
-# (we can add more logic here for other cases)
+# Defines the logic for the client's behaviour upon reception of various server's messages
 def recieve_logic(reply):
     global is_registered
     feedback = reply
 
+    #Updates the cient's registration status based on the server's response
     if re.search(rf'\b{"REGISTERED"}\b', feedback):
         is_registered = True
     elif re.search(rf'\b{"DEREGISTERED"}\b', feedback):
         is_registered = False
 
+    #Creates a new item in the negotiation_items_info dictionary after a negotiation response
     if re.search(rf'\b{"NEGOTIATE"}\b', feedback):
         request_type, request_number, item_id, item_name, max_price = feedback.split(", ")
         negotiation_items_info[item_id] = (request_number, item_name, max_price)
 
+    #Creates a new item in the found_items_info dictionary after a found response
     if re.search(rf'\b{"FOUND"}\b', feedback):
         request_type, request_number, item_id, item_name, price = feedback.split(", ")
         found_items_info[item_id] = (request_number, item_name, price)
 
+    #Starts the tcp connection after a start_tcp response
     if re.search(rf'\b{"START_TCP"}\b', feedback):
         request_type, request_number = feedback.split(", ")
         tcp_connection(request_number)
 
 
-
-# start of the logic of constantly listening for messages from the server
+# Listener loop for incoming server messages
+# Handles the incoming responses using the receive_logic() method
 def receive_messages():
     while True:
         try:
-            d = s.recvfrom(1024)
+            d = udp_socket.recvfrom(1024)
             reply = d[0].decode("utf-8")
             addr = d[1]
             print(f"\nServer reply [{addr[0]}, {addr[1]}]: {reply}\n")
@@ -262,7 +263,9 @@ receive_thread = threading.Thread(target=receive_messages)
 receive_thread.daemon = True
 receive_thread.start()
 
-# Sending a message to the server
+# Printing a welcome message 
+print(f"Welcome to the Peer-to-Peer Shopping System!\n")
+# Main loop for handling client's messages
 while True:
     user_input = int(
         input(
@@ -278,12 +281,13 @@ while True:
         )
     )
 
+    #Storing the message to be sent based on the user's input
     request_msg = user_request(user_input)
 
     # Sending the request message to the server
     if request_msg is not None:
         try:
-            s.sendto(request_msg.encode("utf-8"), (server_host, server_port))
+            udp_socket.sendto(request_msg.encode("utf-8"), (server_host, server_port))
             request_number += 1
             update_request_number(request_number)
         except socket.error as msg:

@@ -1,3 +1,4 @@
+#Importing necessary libraries
 import json
 import socket
 import random
@@ -9,6 +10,7 @@ from enum import Enum
 # Defining the socket parameters
 HOST = "0.0.0.0"  # listening on all available network interfaces
 PORT = 5000  # arbitrary port number chosen for the server socket
+
 
 num_list = []
 
@@ -30,7 +32,7 @@ except OSError as e:
     sys.exit()
 
 
-# Binding the socket to the host and port number
+# Binding the socket to the server's host and port number
 try:
     udp_socket.bind((HOST, PORT))
 except OSError as e:
@@ -43,11 +45,11 @@ print("Socket was successfully bound!\n")
 # Setting a timeout for the socket
 udp_socket.settimeout(5)
 
-# Creating a mutex lock to avoid race conditions
+# Creating a mutex lock to be used later on to avoid race conditions
 lock = threading.Lock()
 
 
-# User request handler
+# Switch statement to handle various client requests
 def handle_request(user_request, data, addr):
     if user_request == "REGISTER":
         handle_registration(data, addr)
@@ -69,7 +71,7 @@ def handle_request(user_request, data, addr):
         print("Invalid Request!")
 
 
-# Handles the register request
+# Handles the register request and replies back to the client
 def handle_registration(data, addr):
     request_type, request_number, name, ip, udp, tcp = data.split(", ")
     lock.acquire()
@@ -108,7 +110,7 @@ def handle_registration(data, addr):
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
 
-# Handles the de-registration request
+# Handles the de-registration request and replies back to the client
 def handle_deregistration(data, addr):
     request_type, request_number, name, ip, udp, tcp = data.split(", ")
     lock.acquire()
@@ -138,7 +140,7 @@ def handle_deregistration(data, addr):
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
 
-# Generate unique item ID
+# Generates a unique item ID
 def item_id_generator():
     while True:
         random_num = random.randint(1000, 9999)
@@ -147,7 +149,7 @@ def item_id_generator():
             return str(random_num)
 
 
-# Handles the looking_for request
+# Handles the looking_for request and broadcasts the search message to all other clients
 def handle_looking_for(data, addr):
     request_type, request_number, name, item_name, item_description, max_price = (
         data.split(", ")
@@ -205,6 +207,8 @@ def handle_make_offer(data, addr):
 
     lock.acquire()
 
+    #Creates a new offer field in the dictionary if no offers for that item already exist
+    #Otherwise, appends the new offer to the same item_id
     try:
         try:
             with open("Offers.json", "r") as json_file:
@@ -234,7 +238,7 @@ def handle_make_offer(data, addr):
 
 
 
-#Handles Negotiation Response
+#Handles the accept request and replies to the buyer with found message
 def handle_accept(data, addr):
     request_type, request_number, item_id, item_name, item_price = data.split(", ")
 
@@ -248,11 +252,13 @@ def handle_accept(data, addr):
 
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
-
+#handles the rejection request and replies to the buyer with not_found
 def handle_rejection(data, addr):
     request_type, request_number, item_id, item_name, item_price = data.split(", ")
 
+    #Fetching the item details of the item with id=item_id
     item_details = fetch_item_data(item_id)
+    #Fetching the info of the buyer (ip, port, etc...)
     buyer_info = fetch_user_data(item_details["buyer"])
 
     not_found_msg = f"NOT-FOUND, {request_number}, {item_id}, {item_name}, {item_details['max_price']}"
@@ -287,6 +293,7 @@ def handle_rejection(data, addr):
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
 
+#Handles the buy request and starts tcp communication
 def handle_buy(data, addr):
     request_type, request_number, item_id, item_name, item_price = data.split(", ")
 
@@ -302,8 +309,62 @@ def handle_buy(data, addr):
 
     ##open tcp connection between buyer and seller
 
+    threading.Thread(target=tcp_connection, args=(seller_info,buyer_info,item_details,offer_details)).start()
+
+#Starts tcp communication for the buying phase
+def tcp_connection(seller_info,buyer_info,item_details,offer_details):
+    RQ_server = random.randint(1, 500)
+
+    tcp_msg = f"START_TCP, {RQ_server}"
+
+    udp_socket.sendto(tcp_msg.encode("utf-8"), (buyer_info["ip"], int(buyer_info["udp"])))
+    udp_socket.sendto(tcp_msg.encode("utf-8"), (seller_info["ip"], int(seller_info["udp"])))
+
+    TCP_PORT = 6000
 
 
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as tcp_socket:
+        tcp_socket.bind((HOST, TCP_PORT))  # Bind the server to the address and port
+        tcp_socket.listen(5)  # Listen for incoming connections
+        print(f"Server listening on {HOST}:{TCP_PORT}")
+
+        # Accept a connection from the client
+        conn, addr = tcp_socket.accept()
+        conn2, addr2 = tcp_socket.accept()
+
+
+        max_price = item_details["max_price"]
+        offer_price = offer_details["price"]
+        item_name_print = item_details["item_name"]
+
+        if max_price >= offer_price:
+            final_price = offer_price
+        else:
+            final_price = max_price
+
+
+        inform_req_mes_1 = f"INFORM_Req, {RQ_server}, {item_name_print}, {final_price}!"
+        inform_req_mes_2 = f"INFORM_Req, {RQ_server}, {item_name_print}, {final_price}!"
+
+
+        with conn:
+            print(f"Connected by {addr}")
+            # Receive data from the client
+            data1 = conn.recv(1024)
+            print(f"Received: {data1.decode()}")
+            # Send a response back to the client
+            conn.sendall(inform_req_mes_1.encode("utf-8"))
+
+        with conn2:
+            print(f"Connected by {addr2}")
+            # Receive data from the client
+            data2 = conn2.recv(1024)
+            print(f"Received: {data2.decode()}")
+            # Send a response back to the client
+            conn2.sendall(inform_req_mes_2.encode("utf-8"))
+
+
+#Handles the cancel request and replies to the buyer with cancel
 def handle_cancel(data, addr):
     request_type, request_number, item_id, item_name, item_price = data.split(", ")
     item_details = fetch_item_data(item_id)
@@ -329,6 +390,7 @@ def handle_cancel(data, addr):
         except FileNotFoundError:
             offers = {}
 
+        #Removing the item and the offer for it if the seller cancels the negotiation
         del offers[item_id]
         del wanted_items[item_id]
 
@@ -344,17 +406,20 @@ def handle_cancel(data, addr):
     print(f"Message received from [{addr[0]}, {addr[1]}]: {data}")
 
 
-
 # Waits for offers and compares them after the waiting period
 def wait_offer_handler(item_id):
     # Wait for 5 minutes (300 seconds)
-    time.sleep(15)
+    time.sleep(120)
 
+    #compares the offer prices and chooses the minimum price
     best_offer = compare_prices(item_id)
 
+    #fetching info of the item with id=item_id 
     item = fetch_item_data(item_id)
+    #fetching the buyer's name from the item's info
     buyer = fetch_user_data(item["buyer"])
 
+    #Replies to the buyer with different messages based on the offer case ()
     if best_offer:
         print(f"Best Offer for item {item_id}: {best_offer}")
 
@@ -396,6 +461,7 @@ def wait_offer_handler(item_id):
             except FileNotFoundError:
                 wanted_items = {}
 
+            #Removing the item from the items dictionary if no offers are made after 2 minutes
             del wanted_items[item_id]
 
             with open("Wanted_Items.json", "w") as json_file:
@@ -434,7 +500,7 @@ def compare_prices(item_id):
     finally:
         lock.release()
 
-
+#Fetches the info of the item with id=item_id in the wanted_items dictionary
 def fetch_item_data(item_id):
     lock.acquire()
     try:
@@ -445,7 +511,7 @@ def fetch_item_data(item_id):
 
     return wanted_items[item_id]
 
-
+#Fetches the info of the best offer made for the item with id=item_id from the offers dictionary
 def fetch_offer_data(item_id):
     lock.acquire()
     try:
@@ -456,17 +522,7 @@ def fetch_offer_data(item_id):
 
     return offers[item_id][0]
 
-
-def fetch_offer_data(item_id):
-    lock.acquire()
-    try:
-        with open("Offers.json", "r") as json_file:
-            offers = json.load(json_file)
-    finally:
-        lock.release()
-
-    return offers[item_id][0]
-
+#Fetches the info of a given user from the users dictionary
 def fetch_user_data(user_name):
     lock.acquire()
     try:
@@ -479,7 +535,6 @@ def fetch_user_data(user_name):
         lock.release()
 
     return users[user_name]
-
 
 # Main server loop
 while True:
