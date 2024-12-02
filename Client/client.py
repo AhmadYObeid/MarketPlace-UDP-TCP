@@ -74,22 +74,20 @@ def update_request_number(request_number):
 
 
 def user_request(user_input):
-    match user_input:
-        case 1:
-            return user_registration(request_number)
-        case 2:
-            return user_deregistration(request_number)
-        case 3:
-            return looking_for(request_number)
-        case 4:
-            return make_offer(request_number)
-        case 5:
-            return accept_refuse()
-        case 6:
-            return buy_cancel()
-        case _:
-            print(f"Invalid option! Please try again.")
-
+    if user_input == 1:
+        return user_registration(request_number)
+    elif user_input == 2:
+        return user_deregistration(request_number)
+    elif user_input == 3:
+        return looking_for(request_number)
+    elif user_input == 4:
+        return make_offer(request_number)
+    elif user_input == 5:
+        return accept_refuse()
+    elif user_input == 6:
+        return buy_cancel()
+    else:
+        print(f"Invalid option! Please try again.")
 
 
 # Prepares the registration request message to be sent to the server
